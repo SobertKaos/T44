@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import friendlysam as fs
 import matplotlib.pyplot as plt
+from models import DispatchModel
 from copy import deepcopy
 from partlib import (Resources, HeatPump, Import, Export, LinearCHP,
                      LinearSlowCHP, Boiler, PipeLoss, Accumulator)
@@ -147,7 +148,7 @@ class HeatNetworkModel():
         print("Get fixed prices")
         parameters['prices'].update(self.get_fixed_price(Resources))
         print("building model")
-        model = fs.models.DispatchModel()
+        model = DispatchModel()
 #            horizon=int(parameters['horizon'] / parameters['time_unit']),
 #            step=int(parameters['step'] / parameters['time_unit']))
 
