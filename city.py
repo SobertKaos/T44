@@ -1,0 +1,486 @@
+# -*- coding: utf-8 -*-
+
+import sys
+import io
+import logging
+import csv
+import pdb
+import pandas as pd
+import numpy as np
+import friendlysam as fs
+import matplotlib.pyplot as plt
+from copy import deepcopy
+from partlib import (Resources, HeatPump, Import, Export, LinearCHP,
+                     LinearSlowCHP, Boiler, PipeLoss, Accumulator)
+
+# logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.DEBUG)
+
+print("using pandas version ", pd.__version__)
+print("using python version", sys.version)
+
+
+class HeatNetworkModel():
+
+    def __init__(self):
+        print('Initializing model')
+
+        self._DEFAULT_PARAMETERS = {
+            'time_unit': pd.Timedelta('1h'),  # Time unit
+            'step': pd.Timedelta('48h'),  # Time span to lock in each step
+            'horizon': pd.Timedelta('72h'),  # Planning horizon
+            'prices': {
+                Resources.heating_oil: 52.88,  # 500 SEK/MWh (LHV)
+                Resources.bio_oil: 52.88,  # 500 SEK/MWh (LHV)
+                Resources.natural_gas: 29.61,  # 280 SEK/MWh (LHV)
+                Resources.wood_chips: 21.15,  # 200 SEK/MWh (LHV)
+                Resources.wood_pellets: 320,  # 320 SEK/MWh (LHV)
+                Resources.waste: 0,  # Assumed lower than others, really != 0
+        }
+
+        self.dynamicParts = set()
+
+    def RunModel(self, time_unit, natural_gas_price):
+        print('Running model')
+        seed = 2
+        parameters = self.get_parameters(
+            time_unit=pd.Timedelta(str(time_unit)+"h"),
+            step=pd.Timedelta('24h'))
+        self.t0 = self.get_heat_history(parameters['time_unit']).index[0]
+        t_end = self.get_heat_history(parameters['time_unit']).index[-1]
+        # MSE : because FS cannot handle end of files
+        self.t_end = t_end.replace(day=t_end.day-4) # INFO Was 3
+        # self.t0 = pd.Timestamp('2013-01-01')
+        # self.t_end = pd.Timestamp('2014-01-01')
+        print("Make model")
+        self.m = self.make_model(parameters, natural_gas_price, seed=seed)
+        self.m.time=self.t0 
+        self.m.time_end= self.t_end
+        self.m.step = parameters['step']
+        
+        self.m.solver = fs.get_solver()
+        _start_time = pd.Timestamp.now()
+        print("Beginning simulation")
+        self.m.solve()
+        _end_time = pd.Timestamp.now()
+        _elapsed = _end_time-_start_time
+        print('Done! Simulation took {0:0.0f} seconds'.format(_elapsed.total_seconds()))
+
+    def set_heat_history(self, p_heat_history):
+        self.heat_history_file = p_heat_history
+
+    def set_power_demand(self, p_power_demand):
+        self.power_demand_file = p_power_demand
+
+    def set_power_price(self, p_power_price):
+        self.power_price_file = p_power_price
+
+    def set_fixed_price(self, p_fixed_price):
+        self.fixed_price_file = p_fixed_price
+
+    def get_heat_history(self, time_unit):
+        heat_history = pd.read_csv(
+            self.heat_history_file,
+            # self.heat_history_raw,
+            encoding='utf-8',
+            index_col='Time (UTC)',
+            parse_dates=True)
+        return heat_history.resample(time_unit).sum()
+
+    def get_heat_history_industry(self, time_unit):
+        heat_history_industry = pd.read_csv(
+            'industrial_load_generated.csv',
+            encoding='utf-8',
+            index_col='Time (UTC)',
+            parse_dates=True)
+        return heat_history_industry.resample(time_unit).sum()
+
+    def get_power_demand(self, time_unit):
+        power_demand = pd.read_csv(
+            self.power_demand_file,
+            # self.power_demand_raw,
+            encoding='utf-8',
+            index_col='Time (UTC)',
+            parse_dates=True,
+            squeeze=True)
+        return power_demand.resample(time_unit).sum()
+
+    def get_power_price(self, time_unit):
+        print(self.power_price_file)
+        power_price = pd.read_csv(
+            self.power_price_file,
+            encoding='utf-8',
+            index_col='Time (UTC)',
+            parse_dates=True,
+            squeeze=True)
+        return power_price.resample(time_unit).mean()
+
+    def get_fixed_price(self, resources):
+        print(self.fixed_price_file)
+        with open(self.fixed_price_file) as f:
+            f.readline()
+            prices = dict(csv.reader(f, delimiter=','))
+        resource_dict = {}
+
+        for r in resources:
+            # Splits the string following '<Resources.'
+            key = repr(r)[11:].split(':')[0]
+            resource_dict[key] = r
+
+        fixed_prices = {}
+        for key, value in prices.items():
+            fixed_prices[resource_dict[key]] = float(value)
+
+        return fixed_prices
+
+    def get_parameters(self, **kwargs):
+        parameters = deepcopy(self._DEFAULT_PARAMETERS)
+        parameters.update(kwargs)
+        return parameters
+
+    def make_model(self, parameters, natural_gas_price, seed=None):
+        uncertain = DummyRandomizer() if seed is None else Randomizer(seed)
+        print("Get power price")
+        parameters['prices'][Resources.power] = self.get_power_price(parameters['time_unit'])
+        print("Set gas price to ", natural_gas_price)
+        parameters['prices'][Resources.natural_gas] = natural_gas_price
+        print("Get fixed prices")
+        parameters['prices'].update(self.get_fixed_price(Resources))
+        print("building model")
+        model = fs.models.DispatchModel()
+#            horizon=int(parameters['horizon'] / parameters['time_unit']),
+#            step=int(parameters['step'] / parameters['time_unit']))
+
+        parts = self.make_parts(parameters, uncertain)
+        # No explicit distribution channels except for heat.
+        for r in Resources:
+            if r == Resources.heat:
+                pass
+            else:
+                cluster = fs.Cluster(resource=r, name='{} cluster'.format(r))
+                for p in parts:
+                    if type(p) is not fs.parts.FlowNetwork:
+                        # FlowNetwork has no attribute ´resources´
+                        if r in p.resources:
+                            cluster.add_part(p)
+                    else:
+                        model.add_part(p)
+                cluster.cost = lambda t: 0
+                model.add_part(cluster)
+
+        for p in model.descendants_and_self:
+            p.time_unit = parameters['time_unit']
+
+        return model
+
+    def addParts(self, part):
+        self.dynamicParts.add(part)
+
+    def make_parts(self, parameters, uncertain):
+        parts = set()
+
+        heat_history = self.get_heat_history(parameters['time_unit'])
+        power_demand = self.get_power_demand(parameters['time_unit'])
+        heat_history_industry = self.get_heat_history_industry(parameters['time_unit'])
+        taxation = self.make_tax_function(parameters)
+
+        for r in Resources:
+            if r is not Resources.heat:
+                parts.add(
+                    Import(
+                        resource=r,
+                        price=parameters['prices'][r],
+                        name='Import({})'.format(r)))
+
+        # Conversion factor from hour to model time unit:
+        # "hour" is the number of model time steps per hour.
+        # So when capacities/consumption/etc per time step in plants below
+        # are stated like 600 / hour", then think "600 MWh per hour".
+        # Makes sense because larger time unit --> smaller value of "hour" -->
+        # larger max output per time step.
+        hour = pd.Timedelta('1h') / parameters['time_unit']
+        series_reader = lambda series: series.loc.__getitem__
+        city = fs.Node(name='City')
+        city.consumption[Resources.heat] = series_reader(heat_history.sum(axis=1))
+        city.consumption[Resources.power] = series_reader(power_demand)
+        city.cost = lambda t: 0
+        city.state_variables = lambda t: ()
+        parts.add(city)
+
+        Industry = fs.Node(name='Industry')
+        Industry.consumption[Resources.heat] = series_reader(heat_history_industry.sum(axis=1))
+        Industry.cost = lambda t: 0
+        Industry.state_variables = lambda t: ()
+        parts.add(Industry)
+
+        powerExport = Export(resource = Resources.power,
+                             capacity=1000 / hour, # Arbitrarily chosen, assumed higher than combined production
+                             price = parameters['prices'][Resources.power]/10)
+        parts.add(powerExport)
+
+        parts.add(
+            LinearSlowCHP(
+                name='CHP A',
+                eta=0.776, # was 77.6
+                alpha=0.98,
+                Fmax=4.27 / hour,  # 449.0 / hour,  # 449 m3/hour
+                Fmin=2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
+                start_steps=int(np.round(.5 * hour)),
+                fuel=Resources.natural_gas,
+                taxation=taxation))
+
+        parts.add(
+            LinearSlowCHP(
+                name='CHP B',
+                eta=0.778, #was 77.8
+                alpha=0.98,
+                Fmax=4.27 / hour,  # 449.0 / hour,  # 449 m3/hour
+                Fmin=2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
+                start_steps=int(np.round(.5 * hour)),
+                fuel=Resources.natural_gas,
+                taxation=taxation))
+
+        parts.add(
+            Boiler(
+                name='Boiler A',
+                eta=0.9,
+                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=135.52 / hour,#Sm3/hour
+                fuel=Resources.natural_gas,
+                taxation=taxation))
+
+        parts.add(
+            Boiler(
+                name='Boiler B',
+                eta=0.87,
+                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=135.52 / hour,#Sm3/hour
+                fuel=Resources.natural_gas,
+                taxation=taxation))
+
+        parts.add(
+            Boiler(
+                name='Boiler C',
+                eta=0.89,
+                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=465.44 / hour,#Sm3/hour
+                fuel=Resources.natural_gas,
+                taxation=taxation))
+
+        parts.add(
+            Boiler(
+                name='Boiler D',
+                eta=0.77,
+                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=465.44 / hour,#Sm3/hour
+                fuel=Resources.natural_gas,
+                taxation=taxation))
+
+        def make_tax_function(*args, **kwargs):
+            return lambda x: 0
+
+        parts.add(
+            LinearSlowCHP(
+                name='Waste Incinerator',
+                start_steps=12,
+                fuel=Resources.waste,
+                alpha=0.46,
+                eta=0.81,
+                Fmin=10 / hour,
+                Fmax=45 /hour, # Update to reflect 25 MW output max according to D4.2 p 32
+                taxation=taxation))
+
+        
+        accumulator = Accumulator(
+                resource=Resources.heat,
+                max_flow=6/hour,
+                max_energy=68,
+                loss_factor = 0,
+                name='TES')
+
+        parts.add(accumulator)
+
+        heat_producers = {p for p in parts
+                          if Resources.heat in p.production and
+                          not isinstance(p, fs.Cluster)}
+        production_cluster = fs.Cluster(resource=Resources.heat,
+                                        name='production cluster')
+        production_cluster.cost = lambda t: 0
+
+        for p in heat_producers:
+            production_cluster.add_part(p)
+        production_cluster.add_part(accumulator)
+
+        parts.add(production_cluster)
+
+        heat_consumers = {p for p in parts
+                          if Resources.heat in p.consumption and
+                          not isinstance(p, fs.Cluster)}
+
+        consumption_cluster = fs.Cluster(resource=Resources.heat,
+                                         name='consumption cluster')
+        consumption_cluster.cost = lambda t: 0
+        for p in heat_consumers:
+            if not isinstance(p, Accumulator):
+                consumption_cluster.add_part(p)
+        consumption_cluster.add_part(powerExport)
+        parts.add(consumption_cluster)
+
+        
+        pipe = fs.FlowNetwork(Resources.heat)
+        pipe.cost = lambda t: 0
+        pipe.connect(production_cluster, consumption_cluster)
+        parts.add(pipe)
+
+        return parts
+
+
+    def DisplayResult(self):
+
+        heat_producers = [p for p in self.m.descendants
+                          if is_producer(p, Resources.heat) and
+                          not isinstance(p, fs.Cluster)]
+        
+        times = self.m.times_between(self.t0, self.t_end)
+        
+        heat = {p.name: fs.get_series(p.production[Resources.heat], times) for p in heat_producers}
+        heat = pd.DataFrame.from_dict(heat)
+        other = ['Boiler A',
+                 'Boiler B',
+                 'Boiler C',
+                 'Boiler D']
+        heat['Other'] = heat[other].sum(axis=1)
+        for key in other:
+            del heat[key]
+
+        order = ['Waste Incinerator',
+                 'CHP A',
+                 'CHP B',
+                 'Other']
+        heat = heat[order]
+        heat *= pd.Timedelta('1h') / heat.index.freq
+        print(heat)
+
+        storage_times = self.m.times_between(self.t0+pd.Timedelta('2h'), self.t_end)
+        storage = [p for p in self.m.descendants if isinstance(p, Accumulator)]
+        stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
+        stored_energy = pd.DataFrame.from_dict(stored_energy)
+
+        p = heat.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+        p.get_legend().set_bbox_to_anchor((0.5, 1))
+        s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+        s.get_legend().set_bbox_to_anchor((0.5, 1))
+        plt.show()
+
+    def GetHeatLoad(self, p_equipment):
+        heat_producers = [p for p in self.m.descendants
+                          if is_producer(p, Resources.heat) and not
+                          isinstance(p, fs.Cluster)]
+
+        times = self.m.times_between(self.t0, self.t_end)
+
+        heat = {p.name: fs.get_series(p.production[Resources.heat], times)
+                for p in heat_producers}
+        heat = pd.DataFrame.from_dict(heat)
+
+        heatLoadWithTimestamps = heat[p_equipment].to_dict()
+        heatLoad = dict()
+        for elem in heatLoadWithTimestamps:
+            heatLoad[str(elem.to_pydatetime())] = heatLoadWithTimestamps[elem]
+
+        return heatLoad
+
+    def GetPowerLoad(self, p_equipment):
+        power_producers = [p for p in self.m.descendants
+                           if is_producer(p, Resources.power) and
+                           not isinstance(p, fs.Cluster)]
+
+        times = self.m.times_between(self.t0, self.t_end)
+
+        power = {p.name: fs.get_series(p.production[Resources.power], times)
+                 for p in power_producers}
+        power = pd.DataFrame.from_dict(power)
+
+        powerLoadWithTimestamps = power[p_equipment].to_dict()
+        powerLoad = dict()
+        for elem in powerLoadWithTimestamps:
+            powerLoad[str(elem.to_pydatetime())] = powerLoadWithTimestamps[elem]
+
+        return powerLoad
+
+    def GetNaturalGasConsumption(self, p_equipment):
+        gas_consummers = [p for p in self.m.descendants
+                          if is_consumer(p, Resources.natural_gas) and
+                          not isinstance(p, fs.Cluster)]
+
+        times = self.m.times_between(self.t0, self.t_end)
+
+        gas = {p.name: fs.get_series(p.consumption[Resources.natural_gas], times)
+               for p in gas_consummers}
+        gas = pd.DataFrame.from_dict(gas)
+
+        gasLoadWithTimestamps = gas[p_equipment].to_dict()
+        gasLoad = dict()
+        for elem in gasLoadWithTimestamps:
+            gasLoad[str(elem.to_pydatetime())] = gasLoadWithTimestamps[elem]
+
+        return gasLoad
+
+    def WriteLoadToCsv(self, pLoad, pPath, pFilename):
+        writer = csv.DictWriter(open(pPath + '/' + pFilename, 'w'),
+                                fieldnames=['Time', 'Load'])
+        writer.writeheader()
+        for elem in pLoad:
+            writer.writerow({'Time': elem, 'Load': pLoad[elem]})
+
+    def OutputResults(self, pPath):
+        #  write time series
+        self.WriteLoadToCsv(self.GetHeatLoad('Boiler A'), pPath, 'BoilerA_heat.csv')
+        self.WriteLoadToCsv(self.GetHeatLoad('Boiler B'), pPath, 'BoilerB_heat.csv')
+        self.WriteLoadToCsv(self.GetHeatLoad('Boiler C'), pPath, 'BoilerC_heat.csv')
+        self.WriteLoadToCsv(self.GetHeatLoad('Boiler D'), pPath, 'BoilerD_heat.csv')
+        self.WriteLoadToCsv(self.GetHeatLoad('CHP A'), pPath, 'CHPA_heat.csv')
+        self.WriteLoadToCsv(self.GetHeatLoad('CHP B'), pPath, 'CHPB_heat.csv')
+        self.WriteLoadToCsv(self.GetHeatLoad('Waste Incinerator'), pPath, 'Waste_heat.csv')
+        self.WriteLoadToCsv(self.GetPowerLoad('CHP A'), pPath, 'CHPA_power.csv')
+        self.WriteLoadToCsv(self.GetPowerLoad('CHP B'), pPath, 'CHPB_power.csv')
+        self.WriteLoadToCsv(self.GetNaturalGasConsumption('CHP A'), pPath, 'CHPA_gas.csv')
+        self.WriteLoadToCsv(self.GetNaturalGasConsumption('CHP B'), pPath, 'CHPB_gas.csv')
+        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler A'), pPath, 'BoilerA_gas.csv')
+        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler B'), pPath, 'BoilerB_gas.csv')
+        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler C'), pPath, 'BoilerC_gas.csv')
+        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler D'), pPath, 'BoilerD_gas.csv')
+
+        #  write sums for the whole simulation
+        writer = open(pPath + '/KPIs.csv', 'w')
+        writer.write("DeliveredGas,ExportedHeat,ExportedPower\n")
+        print(self.TotalDeliveredGas())
+        print(self.TotalExportedHeat())
+        print(self.TotalExportedPower())
+        writer.write(str(self.TotalDeliveredGas())+","+str(self.TotalExportedHeat())+","+str(self.TotalExportedPower())+"\n")
+        writer.close()
+
+    def TotalDeliveredGas(self):
+        res = 0
+        for equipment in ['Boiler A', 'Boiler B', 'Boiler C',
+                          'Boiler D', 'CHP A', 'CHP B']:
+            res += sum(self.GetNaturalGasConsumption(equipment).values())
+        return res
+
+    def TotalExportedHeat(self):
+        res = 0
+        for equipment in ['Boiler A', 'Boiler B', 'Boiler C',
+                          'Boiler D', 'CHP A', 'CHP B', 'Waste Incinerator']:
+            res += sum(self.GetHeatLoad(equipment).values())
+        return res
+
+    def TotalExportedPower(self):
+        res = 0
+        for equipment in ['CHP A', 'CHP B', 'Waste Incinerator']:
+            res += sum(self.GetPowerLoad(equipment).values())
+        return res
+
+
+if __name__ == "__main__":
+    pass
+
