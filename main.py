@@ -23,5 +23,5 @@ city.set_power_demand(resourcesPath + "/power_demand.csv")
 city.set_fixed_price(resourcesPath + "/fixed_prices.csv")
 
 run_model.RunModel(model)
-process_results.process_results(model))
+process_results.process_results(model)
 print("FriendlySam run finished")

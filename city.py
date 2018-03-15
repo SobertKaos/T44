@@ -37,7 +37,9 @@ class HeatNetworkModel():
                 Resources.wood_chips: 21.15,  # 200 SEK/MWh (LHV)
                 Resources.wood_pellets: 320,  # 320 SEK/MWh (LHV)
                 Resources.waste: 0,  # Assumed lower than others, really != 0
+                }
         }
+
 
         self.dynamicParts = set()
 
@@ -290,7 +292,6 @@ class HeatNetworkModel():
                 Fmin=10 / hour,
                 Fmax=45 /hour, # Update to reflect 25 MW output max according to D4.2 p 32
                 taxation=taxation))
-
         
         accumulator = Accumulator(
                 resource=Resources.heat,

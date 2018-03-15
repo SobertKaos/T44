@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import pandas as pd.
+import pandas as pd
 
 def read_data(data_path=None, file_name=None):
     '''Read the data from Excel and save it in a dictionary'''

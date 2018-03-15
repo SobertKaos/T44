@@ -199,5 +199,6 @@ class Export(fs.Node):
             self.cost = lambda t: -price * quantity(t)
         else:
             self.cost = lambda t: -price[t] * quantity(t)
-        
+
         self.state_variables = lambda t: {quantity(t)}
+        
