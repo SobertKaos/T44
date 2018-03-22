@@ -290,14 +290,17 @@ class CityModel():
 
 
     def DisplayResult(self):
+        from process_results import is_producer
 
+        t_start = self._DEFAULT_PARAMETERS['t_start']
+        t_end = self._DEFAULT_PARAMETERS['t_end']
         heat_producers = [p for p in self.m.descendants
-                          if is_producer(p, Resources.heat) and
+                          if is_producer(p, pl.Resources.heat) and
                           not isinstance(p, fs.Cluster)]
         
-        times = self.m.times_between(self.t0, self.t_end)
+        times = self.m.times_between(t_start, t_end)
         
-        heat = {p.name: fs.get_series(p.production[Resources.heat], times) for p in heat_producers}
+        heat = {p.name: fs.get_series(p.production[pl.Resources.heat], times) for p in heat_producers}
         heat = pd.DataFrame.from_dict(heat)
         other = ['Boiler A',
                  'Boiler B',
@@ -315,8 +318,8 @@ class CityModel():
         heat *= pd.Timedelta('1h') / heat.index.freq
         print(heat)
 
-        storage_times = self.m.times_between(self.t0+pd.Timedelta('2h'), self.t_end)
-        storage = [p for p in self.m.descendants if isinstance(p, Accumulator)]
+        storage_times = self.m.times_between(t_start+pd.Timedelta('2h'), t_end)
+        storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
         stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
         stored_energy = pd.DataFrame.from_dict(stored_energy)
 
@@ -328,12 +331,12 @@ class CityModel():
 
     def GetHeatLoad(self, p_equipment):
         heat_producers = [p for p in self.m.descendants
-                          if is_producer(p, Resources.heat) and not
+                          if is_producer(p, pl.Resources.heat) and not
                           isinstance(p, fs.Cluster)]
 
-        times = self.m.times_between(self.t0, self.t_end)
+        times = self.m.times_between(t_start, t_end)
 
-        heat = {p.name: fs.get_series(p.production[Resources.heat], times)
+        heat = {p.name: fs.get_series(p.production[pl.Resources.heat], times)
                 for p in heat_producers}
         heat = pd.DataFrame.from_dict(heat)
 
@@ -440,5 +443,5 @@ if __name__ == "__main__":
     import pdb
     model = CityModel()
     model.RunModel()
-    
+    model.DisplayResult()
     pdb.set_trace()
