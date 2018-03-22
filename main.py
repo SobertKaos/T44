@@ -12,16 +12,16 @@ if __name__ == "__main__":
         data_path = f.read()
         pdb.set_trace()
 
-        
-model = city.HeatNetworkModel()
-print("heat_history : " + resourcesPath + "/heat_history.csv")
-print("power_price : " + resourcesPath + "/power_price.csv")
-print("power_demand : " + resourcesPath + "/power_demand.csv")
-city.set_heat_history(resourcesPath + "/heat_history.csv") ## OLD
-city.set_power_price(resourcesPath + "/power_price.csv")
-city.set_power_demand(resourcesPath + "/power_demand.csv")
-city.set_fixed_price(resourcesPath + "/fixed_prices.csv")
+      
+model = city.CityModel()
+print("heat_history : " + data_path + "/heat_history.csv")
+print("power_price : " + data_path + "/power_price.csv")
+print("power_demand : " + data_path + "/power_demand.csv")
+city.set_heat_history(data_path + "/heat_history.csv") ## OLD
+city.set_power_price(data_path + "/power_price.csv")
+city.set_power_demand(data_path + "/power_demand.csv")
+city.set_fixed_price(data_path + "/fixed_prices.csv")
 
 run_model.RunModel(model)
-process_results.process_results(model))
+process_results.process_results(model)
 print("FriendlySam run finished")

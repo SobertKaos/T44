@@ -98,3 +98,6 @@ ENV/
 # mypy
 .mypy_cache/
 .vscode/settings.json
+
+# input data
+data_path.txt
