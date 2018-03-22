@@ -439,5 +439,6 @@ if __name__ == "__main__":
     print('Running city.py standalone')
     import pdb
     model = CityModel()
-    solution = model.RunModel()
+    model.RunModel()
+    
     pdb.set_trace()
