@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import numbers
+import math
 import friendlysam as fs
 from itertools import chain, product
 from collections import OrderedDict
@@ -24,7 +25,7 @@ class Resources(Enum):
 class Boiler(fs.Node):
     """docstring for Boiler"""
 
-    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=None, max_capacity=None, **kwargs):
+    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=0, max_capacity=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
@@ -134,7 +135,7 @@ class LinearSlowCHP(fs.Node):
             yield Constraint(
                 fs.Eq(fs.Sum(m(t) for m in modes.values()), 1), desc='Exactly one mode at a time')
 
-            if start_steps > 0:
+            if start_steps:
                 recent_sum = fs.Sum(on_or_starting(tau) for tau in self.iter_times(t, -(start_steps+1), 0))
                 yield Constraint(
                     modes['on'](t) <= recent_sum / start_steps,
