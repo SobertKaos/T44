@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import numbers
+import math
 import friendlysam as fs
 from itertools import chain, product
 from collections import OrderedDict
@@ -24,18 +25,26 @@ class Resources(Enum):
 class Boiler(fs.Node):
     """docstring for Boiler"""
 
-    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, **kwargs):
+    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=0, max_capacity=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
-            F = VariableCollection(lb=0, ub=Fmax, name='F')
+            F = fs.VariableCollection(lb=0, ub=Fmax, name='F')
+            cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
+        self.cap = cap
+        
         self.consumption[fuel] = F
         self.production[Resources.heat] = lambda t: eta * F(t)
+        self.constraints += self.max_production
 
-        fuel_cons_tax = taxation('consumption', fuel, chp=False)
-        self.cost = lambda t: self.consumption[fuel](t) * fuel_cons_tax
+        self.cost = lambda t: self.consumption[fuel](t) * running_cost
+        self.investment_cost =  cap * 1
 
+        self.static_variables = {cap}
         self.state_variables = lambda t: {F(t)}
+
+    def max_production(self, t):
+        return fs.LessEqual(self.production[Resources.heat](t), self.cap)
 
 class Accumulator(fs.Node):
     def __init__(self, resource, max_flow, max_energy,
@@ -79,19 +88,27 @@ def _CHP_cost_func(node, taxation, fuel):
 class LinearCHP(fs.Node):
     """docstring for LinearCHP"""
 
-    def __init__(self, fuel=None, alpha=None, eta=None, Fmax=None, taxation=None, **kwargs):
-
+    def __init__(self, fuel=None, alpha=None, eta=None, Fmax=None, taxation=None, running_cost=None, max_capacity=None, annuity=None, **kwargs):        
         super().__init__(**kwargs)
 
         with fs.namespace(self):
-            F = VariableCollection(lb=0, ub=Fmax, name='F')
-
+            F = fs.VariableCollection(lb=0, ub=Fmax, name='F')
+            cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
+        self.cap = cap
+        
         self.consumption[fuel] = F
         self.production[Resources.heat] = lambda t: F(t) * eta / (alpha + 1)
-        self.production[Resources.power] = lambda t: alpha * self.production[Resources.heat](t)
+        self.production[Resources.power] = lambda t: alpha * F(t) * eta / (alpha + 1)
+        self.constraints += self.max_production
 
+        self.cost = lambda t: F(t) * running_cost  #_CHP_cost_func(self, taxation, fuel)
+        self.investment_cost = cap * 10
+        
+        self.static_variables =  {cap}
         self.state_variables = lambda t: {F(t)}
-        self.cost = _CHP_cost_func(self, taxation, fuel)
+    
+    def max_production(self, t):
+        return fs.LessEqual(self.production[Resources.heat](t), self.cap)
 
 
 class LinearSlowCHP(fs.Node):
@@ -118,7 +135,7 @@ class LinearSlowCHP(fs.Node):
             yield Constraint(
                 fs.Eq(fs.Sum(m(t) for m in modes.values()), 1), desc='Exactly one mode at a time')
 
-            if start_steps > 0:
+            if start_steps:
                 recent_sum = fs.Sum(on_or_starting(tau) for tau in self.iter_times(t, -(start_steps+1), 0))
                 yield Constraint(
                     modes['on'](t) <= recent_sum / start_steps,
@@ -136,18 +153,68 @@ class LinearSlowCHP(fs.Node):
 class HeatPump(fs.Node):
     """docstring for HeatPump"""
 
-    def __init__(self, COP=None, Qmax=None, taxation=None, **kwargs):
+    def __init__(self, COP=None, max_capacity=None, Qmax=None, taxation=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
-            Q = VariableCollection(lb=0, ub=Qmax, name='Q')
+            Q = fs.VariableCollection(lb=0, ub=Qmax, name='Q')
+            cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
+        self.cap = cap   
+
         self.production[Resources.heat] = Q
         self.consumption[Resources.power] = lambda t: Q(t) / COP
+        self.constraints += self.max_production
+        #power_cons_tax = taxation('consumption', Resources.power)
+        #Instead of using power_cons_tax in the lambda function I added 10 as a fixed cost
+        self.cost = lambda t: self.consumption[Resources.power](t) * 10
+        self.investment_cost = cap * 10
 
-        power_cons_tax = taxation('consumption', Resources.power)
-        self.cost = lambda t: self.consumption[Resources.power](t) * power_cons_tax
-
+        self.static_variables =  {cap}
         self.state_variables = lambda t: {Q(t)}
+
+    def max_production(self, t):
+        return fs.LessEqual(self.production[Resources.heat](t), self.cap)
+
+class SolarPV(fs.Node):
+    def __init__(self, G=None, T=None, max_capacity = None, capacity = None, eta=None, taxation=None, running_cost=0, annuity=None,  **kwargs):        
+        super().__init__(**kwargs)
+        
+
+        if max_capacity:  
+            with fs.namespace(self):              
+                PV_cap = fs.Variable(lb=0, ub=max_capacity, name='PV_cap')
+                
+        else:
+            with fs.namespace(self): 
+                PV_cap = fs.Variable(lb=capacity, ub=capacity, name='PV_cap')
+
+        self.PV_cap=PV_cap
+
+        c1 = -0.0177162
+        c2 = -0.040289
+        c3 = -0.004681
+        c4 = 0.000148
+        c5 = 0.000169
+        c6 = 0.000005
+          
+        def prod(t):
+            if G[t] == 0:
+                prod = PV_cap * 0  
+            else: 
+                prod = PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
+            return prod
+        
+        self.production[Resources.power] =lambda t: prod(t)
+        self.state_variables = lambda t: {}
+        self.static_variables =  {PV_cap}
+        
+        #self.constraints += self.max_production
+
+        self.cost = lambda t: 0
+        self.investment_cost = 0
+
+    def max_production(self, t):
+        return fs.LessEqual(self.production[Resources.power](t), self.PV_cap)
 
 
 class PipeLoss(fs.Node):
