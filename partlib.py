@@ -40,6 +40,7 @@ class Boiler(fs.Node):
         self.cost = lambda t: self.consumption[fuel](t) * running_cost
         self.investment_cost =  cap * 1
 
+
         self.static_variables = {cap}
         self.state_variables = lambda t: {F(t)}
 
@@ -103,6 +104,7 @@ class LinearCHP(fs.Node):
 
         self.cost = lambda t: F(t) * running_cost  #_CHP_cost_func(self, taxation, fuel)
         self.investment_cost = cap * 10
+
         
         self.static_variables =  {cap}
         self.state_variables = lambda t: {F(t)}
@@ -169,6 +171,7 @@ class HeatPump(fs.Node):
         self.cost = lambda t: self.consumption[Resources.power](t) * 10
         self.investment_cost = cap * 10
 
+
         self.static_variables =  {cap}
         self.state_variables = lambda t: {Q(t)}
 
@@ -178,15 +181,14 @@ class HeatPump(fs.Node):
 class SolarPV(fs.Node):
     def __init__(self, G=None, T=None, max_capacity = None, capacity = None, eta=None, taxation=None, running_cost=0, annuity=None,  **kwargs):        
         super().__init__(**kwargs)
-        
-
+     
         if max_capacity:  
             with fs.namespace(self):              
                 PV_cap = fs.Variable(lb=0, ub=max_capacity, name='PV_cap')
-                
+                self.static_variables =  {PV_cap}
         else:
             with fs.namespace(self): 
-                PV_cap = fs.Variable(lb=capacity, ub=capacity, name='PV_cap')
+                PV_cap = capacity
 
         self.PV_cap=PV_cap
 
@@ -206,7 +208,6 @@ class SolarPV(fs.Node):
         
         self.production[Resources.power] =lambda t: prod(t)
         self.state_variables = lambda t: {}
-        self.static_variables =  {PV_cap}
         
         #self.constraints += self.max_production
 

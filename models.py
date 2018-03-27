@@ -45,6 +45,7 @@ class DispatchModel(fs.Part):
         
         solver = fs.get_solver()
         solution = solver.solve(problem)
+        
         for p, t in product(parts, self.iter_times_between(self.time_start, self.time_end)):
             for v in p.state_variables(t):
                 v.take_value(solution)

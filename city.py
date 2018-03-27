@@ -297,8 +297,8 @@ class CityModel():
         return parts
 
 
-
 if __name__ == "__main__":
     print('Running city.py standalone')
     model = CityModel()
     model.RunModel()
+
