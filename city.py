@@ -83,7 +83,7 @@ class CityModel():
         return read_file
 
     def get_heat_history(self, time_unit):
-        heat_history = self.read_csv(self.heat_history_file)
+        heat_history = self.read_csv('test_data.csv')
         return heat_history.resample(time_unit).sum()
 
     def get_heat_history_industry(self, time_unit):
@@ -157,17 +157,21 @@ class CityModel():
         # are stated like 600 / hour", then think "600 MWh per hour".
         # Makes sense because larger time unit --> smaller value of "hour" -->
         # larger max output per time step.
+        
+        heat_history = self.get_heat_history(parameters['time_unit'])
         hour = pd.Timedelta('1h') / parameters['time_unit']
         series_reader = lambda series: series.loc.__getitem__
         city = fs.Node(name='City')
-        city.consumption[pl.Resources.heat] = lambda t: 14
-        city.consumption[pl.Resources.power] = lambda t: 13
+        import math
+        city.consumption[pl.Resources.heat] = lambda t: 10 + 5*math.sin(t.value)
+        #series_reader(heat_history)
+        city.consumption[pl.Resources.power]= lambda t: 13
         city.cost = lambda t: 0
         city.state_variables = lambda t: ()
         parts.add(city)
 
         Industry = fs.Node(name='Industry')
-        Industry.consumption[pl.Resources.heat] = lambda t: 12
+        Industry.consumption[pl.Resources.heat] = lambda t: 30
         Industry.cost = lambda t: 0
         Industry.state_variables = lambda t: ()
         parts.add(Industry)
@@ -177,6 +181,7 @@ class CityModel():
                              price = parameters['prices'][pl.Resources.power]/10)
         parts.add(powerExport)
 
+        
         parts.add(
             pl.LinearSlowCHP(
                 name='CHP A',
@@ -203,7 +208,7 @@ class CityModel():
             pl.Boiler(
                 name='Boiler A',
                 eta=0.9,
-                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                Fmax=5 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=135.52 / hour,#Sm3/hour
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
@@ -212,7 +217,7 @@ class CityModel():
             pl.Boiler(
                 name='Boiler B',
                 eta=0.87,
-                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                Fmax=5 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=135.52 / hour,#Sm3/hour
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
@@ -221,7 +226,7 @@ class CityModel():
             pl.Boiler(
                 name='Boiler C',
                 eta=0.89,
-                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                Fmax=10 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=465.44 / hour,#Sm3/hour
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
@@ -230,30 +235,81 @@ class CityModel():
             pl.Boiler(
                 name='Boiler D',
                 eta=0.77,
-                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
+                Fmax=10 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=465.44 / hour,#Sm3/hour
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
-
+        
         parts.add(
             pl.LinearSlowCHP(
                 name='Waste Incinerator',
                 start_steps=12,
                 fuel=pl.Resources.waste,
-                alpha=0.46,
-                eta=0.81,
-                Fmin=10 / hour,
-                Fmax=45 /hour, # Update to reflect 25 MW output max according to D4.2 p 32
+                alpha=0.43,
+                eta=0.83,
+                #Fmin=10 / hour,
+                #Fmax=45 /hour, # Update to reflect 25 MW output max according to D4.2 p 32
+                max_capacity= 20, 
                 taxation=taxation))
-        
+        """        
         parts.add(
             pl.Accumulator(
                 resource=pl.Resources.heat,
                 max_flow=6/hour,
-                max_energy=68,
+                max_energy= None,
                 loss_factor = 0,
+                max_capacity = 25,
                 name='TES'))
+        
+        parts.add(
+            pl.HeatPump(
+                name='Heatpump',
+                COP=3,
+                Qmax=10 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=465.44 / hour,#Sm3/hour
+                max_capacity=None,
+                taxation=taxation))    
 
+        parts.add(
+            pl.LinearSlowCHP(
+                name='CHP 1',
+                eta=0.776, # was 77.6
+                alpha=0.98,
+                Fmax=10 / hour,  # 449.0 / hour,  # 449 m3/hour
+                Fmin=2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
+                start_steps=int(np.round(.5 * hour)),
+                fuel=pl.Resources.natural_gas,
+                taxation=taxation))
+
+        parts.add(
+            pl.Boiler(
+                name='Boiler 1',
+                eta=0.77,
+                Fmax=15 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=465.44 / hour,#Sm3/hour
+                fuel=pl.Resources.natural_gas,
+                taxation=taxation))    
+                 
+        parts.add(
+            pl.Boiler(
+                name='Boiler 2',
+                eta=0.77,
+                #Fmax=20 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=465.44 / hour,#Sm3/hour
+                max_capacity = 20,
+                fuel=pl.Resources.natural_gas,
+                taxation=taxation))
+
+        parts.add(
+            pl.HeatPump(
+                name='Heatpump 2',
+                COP=3,
+                #Qmax=20 / hour,  # 930.89 / hour,  # Sm3/hour
+                # Fmin=465.44 / hour,#Sm3/hour
+                max_capacity=20,
+                taxation=taxation)) 
+        """
+        
         heat_producers = {p for p in parts
                           if ((pl.Resources.heat in p.production) or
                               (pl.Resources.heat in p.accumulation)) and
@@ -302,31 +358,32 @@ class CityModel():
         
         heat = {p.name: fs.get_series(p.production[pl.Resources.heat], times) for p in heat_producers}
         heat = pd.DataFrame.from_dict(heat)
-        other = ['Boiler A',
+        """other = ['Boiler A',
                  'Boiler B',
                  'Boiler C',
                  'Boiler D']
         heat['Other'] = heat[other].sum(axis=1)
         for key in other:
             del heat[key]
+        """
 
-        order = ['Waste Incinerator',
-                 'CHP A',
-                 'CHP B',
-                 'Other']
-        heat = heat[order]
+        order =[]
+        for heat_producers in heat:
+            order.append(heat_producers)
+        heat=heat[order]
         heat *= pd.Timedelta('1h') / heat.index.freq
         print(heat)
 
-        storage_times = self.m.times_between(t_start+pd.Timedelta('2h'), t_end)
+        
+        storage_times = self.m.times_between(t_start, t_end)
         storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
         stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
         stored_energy = pd.DataFrame.from_dict(stored_energy)
-
+        
         p = heat.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
-        p.get_legend().set_bbox_to_anchor((0.5, 1))
-        s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
-        s.get_legend().set_bbox_to_anchor((0.5, 1))
+        p.get_legend().set_bbox_to_anchor((0.5, 1))        
+        #s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+        #s.get_legend().set_bbox_to_anchor((0.5, 1))
         plt.show()
 
     def GetHeatLoad(self, p_equipment):
@@ -444,4 +501,3 @@ if __name__ == "__main__":
     model = CityModel()
     model.RunModel()
     model.DisplayResult()
-    pdb.set_trace()
