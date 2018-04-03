@@ -25,7 +25,7 @@ class Resources(Enum):
 class Boiler(fs.Node):
     """docstring for Boiler"""
 
-    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=0, max_capacity=None, **kwargs):
+    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=1, max_capacity=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
@@ -44,7 +44,9 @@ class Boiler(fs.Node):
 
         if max_capacity:
             self.constraints += self.max_production
-            self.investment_cost =  cap * 100
+            self.investment_cost = cap * 1
+        else: 
+            self.investment_cost =  0
 
     def max_production(self, t):
         return fs.LessEqual(self.production[Resources.heat](t), self.cap)
@@ -72,7 +74,7 @@ class Accumulator(fs.Node):
         self.static_variables = {cap}
 
         if max_capacity:
-            self.investment_cost = cap * 1000000
+            self.investment_cost = cap * 1
             self.constraints += self.max_volume
 
     def max_volume(self, t):
@@ -137,17 +139,29 @@ class LinearSlowCHP(fs.Node):
         mode_names = ('off', 'starting', 'on')
         with fs.namespace(self):
             modes = OrderedDict(
-                (n, VariableCollection(name=n, domain=fs.Domain.binary)) for n in mode_names)
-            F_on = VariableCollection(lb=0, name='F_on')  # Fuel use if on
-            cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
-            Fmin = cap * 0.2
-        self.cap = cap
+                (n, fs.VariableCollection(name=n, domain=fs.Domain.binary)) for n in mode_names)
+            F_on = fs.VariableCollection(lb=0, name='F_on')  # Fuel use if on
+            #cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
+
+            inv = fs.Variable(domain=fs.Domain.binary)
+
+        self.max_capacity= max_capacity
+        self.inv = inv
+        self.modes=modes
+
+        if max_capacity:
+            Fmin=0.2*max_capacity*(1 + alpha) / eta
+            Fmax=max_capacity*(1 + alpha) / eta
+            self.investment_cost =  inv * max_capacity * 1
+            self.constraints += self.max_production
+        else:
+            self.investment_cost=0
 
         self.consumption[fuel] = lambda t: F_on(t) + modes['starting'](t) * Fmin
         self.production[Resources.heat] = lambda t: F_on(t) * eta / (alpha + 1)
         self.production[Resources.power] = lambda t: alpha * self.production[Resources.heat](t)
 
-        self.cost = _CHP_cost_func(self, taxation, fuel)
+        self.cost = lambda t : self.consumption[fuel](t) * 1 #_CHP_cost_func(self, taxation, fuel)
     
         on_or_starting = lambda t: modes['on'](t) + modes['starting'](t)
         def mode_constraints(t):
@@ -161,24 +175,20 @@ class LinearSlowCHP(fs.Node):
                     desc="'on' mode is only allowed after start_steps in 'on' and 'starting'")
 
             yield Constraint(
-                self.consumption[fuel](t) <= cap * modes['on'](t) + cap * 0.2  * modes['starting'](t),
-                desc='Max fuel use')
-
-        self.static_variables =  {cap}
-        self.investment_cost = cap * 10
-
-        self.constraints += mode_constraints
+                self.consumption[fuel](t) <= Fmax * modes['on'](t) + Fmin  * modes['starting'](t),
+                desc='Max fuel use when on or starting')
+            
+            yield Constraint(
+                self.consumption[fuel](t) >= Fmin * modes['on'](t),
+                desc= 'Min fuel use when on') 
         
+        self.constraints += mode_constraints
+
+        self.static_variables =  {inv}
         self.state_variables = lambda t: {F_on(t)} | {var(t) for var in modes.values()}
 
-    """
-        if max_capacity:
-            self.constraints += self.max_production
-            self.investment_cost = cap * 10
-
     def max_production(self, t):
-        return fs.LessEqual(self.production[Resources.heat](t), self.cap)
-    """
+        return fs.LessEqual(self.production[Resources.heat](t), self.inv*self.max_capacity)
 
 
 class HeatPump(fs.Node):
@@ -203,7 +213,7 @@ class HeatPump(fs.Node):
 
         if max_capacity:
             self.constraints += self.max_production
-            self.investment_cost = cap * 100000000
+            self.investment_cost = cap * 1
 
     def max_production(self, t):
         return fs.LessEqual(self.production[Resources.heat](t), self.cap)
