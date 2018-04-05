@@ -38,8 +38,20 @@ class CityModel():
                 pl.Resources.wood_chips: 7777,
                 pl.Resources.wood_pellets: 7777,
                 pl.Resources.waste: 7777,
+                pl.Resources.CO2: 0
+                },
+            'CO2_factor': {
+                pl.Resources.natural_gas: 5,
+                pl.Resources.power: 5,
+                pl.Resources.heat: 5,
+                pl.Resources.heating_oil: 10,
+                pl.Resources.bio_oil: 5,
+                pl.Resources.wood_chips: 5,
+                pl.Resources.wood_pellets: 5,
+                pl.Resources.waste: 15,
+                pl.Resources.CO2: 0
                 }
-        }
+            }
 
     def RunModel(self):
         print('Running model')
@@ -81,7 +93,7 @@ class CityModel():
                                 parse_dates=True,
                                 **kwargs)
         return read_file
-
+    """
     def get_heat_history(self, time_unit):
         heat_history = self.read_csv('test_data.csv')
         return heat_history.resample(time_unit).sum()
@@ -89,6 +101,7 @@ class CityModel():
     def get_heat_history_industry(self, time_unit):
         heat_history_industry = self.read_csv('industrial_load_generated.csv')
         return heat_history_industry.resample(time_unit).sum()
+    """
 
     def get_power_demand(self, time_unit):
         power_demand = self.read_csv(self.power_demand_file, squeeze=True)
@@ -128,7 +141,7 @@ class CityModel():
 
         for p in model.descendants_and_self:
             p.time_unit = parameters['time_unit']
-
+  
         return model
 
     def make_parts(self, parameters):
@@ -145,11 +158,13 @@ class CityModel():
 
         for r in pl.Resources:
             if r is not pl.Resources.heat:
-                parts.add(
-                    pl.Import(
-                        resource=r,
-                        price=parameters['prices'][r],
-                        name='Import({})'.format(r)))
+                if r is not pl.Resources.CO2:
+                    parts.add(
+                        pl.Import(
+                            resource=r,
+                            price=parameters['prices'][r],
+                            name='Import({})'.format(r),
+                            CO2_factor=parameters['CO2_factor'][r]))
 
         # Conversion factor from hour to model time unit:
         # "hour" is the number of model time steps per hour.
@@ -158,7 +173,7 @@ class CityModel():
         # Makes sense because larger time unit --> smaller value of "hour" -->
         # larger max output per time step.
         
-        heat_history = self.get_heat_history(parameters['time_unit'])
+        #heat_history = self.get_heat_history(parameters['time_unit'])
         hour = pd.Timedelta('1h') / parameters['time_unit']
         series_reader = lambda series: series.loc.__getitem__
         city = fs.Node(name='City')
@@ -181,7 +196,26 @@ class CityModel():
                              price = parameters['prices'][pl.Resources.power]/10)
         parts.add(powerExport)
 
-       
+        def maximum_CO2(CO2_cap):       
+            def CO2_constraint(t):
+                t_start = parameters['t_start']
+                t_end = parameters['t_end']
+                times = CO2.times_between(t_start, t_end)
+                emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](tid) for tid in times)
+                return fs.LessEqual(emissions, CO2_cap)
+            return CO2_constraint
+
+        CO2 = fs.Node(name = 'CO2_emissions')
+        capacity=5000/hour
+        quantity = fs.VariableCollection(lb=0, ub=capacity)
+
+        CO2.consumption[pl.Resources.CO2] = lambda t: quantity(t)
+        CO2.cost = lambda t: 0
+        CO2.state_variables = lambda t: {quantity(t)}
+        CO2.constraints += maximum_CO2(100000000)
+
+        parts.add(CO2)
+
         parts.add(
             pl.LinearSlowCHP(
                 name='CHP A',
@@ -343,12 +377,12 @@ class CityModel():
         consumption_cluster.add_part(powerExport)
         parts.add(consumption_cluster)
 
-        
+
         pipe = fs.FlowNetwork(pl.Resources.heat)
         pipe.cost = lambda t: 0
         pipe.connect(production_cluster, consumption_cluster)
         parts.add(pipe)
-
+    
         return parts
 
 
@@ -380,8 +414,7 @@ class CityModel():
         heat=heat[order]
         heat *= pd.Timedelta('1h') / heat.index.freq
         print(heat)
-
-        
+     
         storage_times = self.m.times_between(t_start, t_end)
         storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
         stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}

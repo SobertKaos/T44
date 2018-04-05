@@ -20,6 +20,7 @@ class Resources(Enum):
     wood_chips = 6
     wood_pellets = 7
     waste = 8
+    CO2 = 9
 
 
 class Boiler(fs.Node):
@@ -273,13 +274,14 @@ class PipeLoss(fs.Node):
 class Import(fs.Node):
     """docstring for Import"""
 
-    def __init__(self, resource=None, capacity=None, price=None, **kwargs):
+    def __init__(self, resource=None, capacity=None, price=None, CO2_factor=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
             quantity = VariableCollection(lb=0, ub=capacity, name='import')
 
-        self.production[resource] = quantity
+        self.production[resource] = lambda t:  quantity(t)
+        self.production[Resources.CO2] = lambda t: quantity(t) * CO2_factor
 
         if isinstance(price, numbers.Real):
             self.cost = lambda t: price * quantity(t)
@@ -297,7 +299,7 @@ class Export(fs.Node):
 
         with fs.namespace(self):
             quantity = VariableCollection(lb=0, ub=capacity, name='export of {}'.format(resource))
-        
+
         self.consumption[resource] = quantity
 
         if isinstance(price, numbers.Real):
@@ -306,4 +308,3 @@ class Export(fs.Node):
             self.cost = lambda t: -price[t] * quantity(t)
 
         self.state_variables = lambda t: {quantity(t)}
-        
