@@ -52,7 +52,7 @@ class CityModel():
                 pl.Resources.CO2: 0
                 }
             }
-
+        
     def RunModel(self):
         print('Running model')
         seed = None
@@ -102,6 +102,61 @@ class CityModel():
         heat_history_industry = self.read_csv('industrial_load_generated.csv')
         return heat_history_industry.resample(time_unit).sum()
     """
+    def get_solar_data(self, time_unit):
+        solar_data = pd.read_csv(
+            'C:/Users/lovisaax/Desktop/solar_data.csv',
+                encoding='utf-8',
+                index_col='Time',
+                parse_dates=True,
+                squeeze=True)
+        return solar_data.resample(time_unit).sum()
+
+    def get_production_data(self, **kwargs):
+        
+        """calculate required production data for solar PV"""
+        parameters = self.get_parameters()
+        solar_data=self.get_solar_data(parameters['time_unit'])
+        Gstc=1
+        Tstc=25
+        coef_temp_PV = 0.035
+        G_roof=solar_data['irradiation']
+        T_out=solar_data['temperature']
+        G_irr = abs(G_roof)/Gstc
+        T_temp = (T_out + coef_temp_PV*G_roof) - Tstc
+
+        production_data = {
+            'CHP invest' :{
+            'name':'CHP invest',
+            'eta' : 0.75,
+            'alpha' : 0.98, #Antar samma värde som för de andra CHP med natural_gas.
+            'start_steps' : int(np.round(.5 * 1)),#bytte ut hour mot 1 här för att få det att fungera.
+            'max_capacity' : 35,
+            'fuel' : pl.Resources.natural_gas,
+            'taxation' : 1,  #ska vara taxation här men fick inte rätt då
+            'investment_cost' : 1
+            },  
+            'TES invest':{
+            'name' : 'TES invest',
+            'resource' : pl.Resources.heat,
+            'max_flow' : 6/1, #Bytte ut hour mot 1. Ska max_flow vara 6 för denna också?
+            'max_energy' : 20, #Vad ska denna vara, 20000kW är angivet som max potential i scenario data?
+            'loss_factor' : 0,
+            'max_capacity' : 20,
+            'investment_cost' : 1
+            },
+
+            'SolarPV' : {
+                'name' : 'SolarPV',
+                'G' : G_irr,
+                'T' : T_temp, 
+                'max_capacity' : 20,
+                #capacity = 10, behövs den här parametern?
+                'eta' : 0.17, #vad ska jag räkna med för verkningsgrad här?
+                'taxation' : None, 
+                'investment_cost' : 1
+        }
+            }
+        return production_data
 
     def get_power_demand(self, time_unit):
         power_demand = self.read_csv(self.power_demand_file, squeeze=True)
@@ -178,7 +233,7 @@ class CityModel():
         series_reader = lambda series: series.loc.__getitem__
         city = fs.Node(name='City')
         import math
-        city.consumption[pl.Resources.heat] = lambda t: 10 + 5*math.sin(t.value)
+        city.consumption[pl.Resources.heat] = lambda t: 30 + 5*math.sin(t.value)
         #series_reader(heat_history)
         city.consumption[pl.Resources.power]= lambda t: 13
         city.cost = lambda t: 0
@@ -221,33 +276,29 @@ class CityModel():
                 name='CHP A',
                 eta=0.776, # was 77.6
                 alpha=0.98,
-                #Fmax= 20/hour,#4.27 / hour,  # 449.0 / hour,  # 449 m3/hour
-                #Fmin=2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
+                Fmax= 4.27 / hour,  # 449.0 / hour,  # 449 m3/hour
+                Fmin= 2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
                 #start_steps=int(np.round(.5 * hour)),
-                max_capacity= 25,
-                #investment_cost = 10000000000,
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
-        """
+        
         parts.add(
             pl.LinearSlowCHP(
                 name='CHP B',
                 eta=0.778, #was 77.8
                 alpha=0.98,
-                Fmax= 30 /hour,#4.27 / hour,  # 449.0 / hour,  # 449 m3/hour
+                Fmax= 4.27 /hour, # 449.0 / hour,  # 449 m3/hour
                 Fmin=2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
                 start_steps=int(np.round(.5 * hour)),
-                #max_capacity=10,
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
-        """
+
         parts.add(
             pl.Boiler(
                 name='Boiler A',
                 eta=0.9,
-                Fmax=15 / hour,  # 930.89 / hour,  # Sm3/hour
+                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=135.52 / hour,#Sm3/hour
-                #max_capacity=16,
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
 
@@ -255,9 +306,8 @@ class CityModel():
             pl.Boiler(
                 name='Boiler B',
                 eta=0.87,
-                Fmax=15 / hour,  # 930.89 / hour,  # Sm3/hour
+                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=135.52 / hour,#Sm3/hour
-                #max_capacity=15,
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
 
@@ -265,19 +315,17 @@ class CityModel():
             pl.Boiler(
                 name='Boiler C',
                 eta=0.89,
-                Fmax=15 / hour,  # 930.89 / hour,  # Sm3/hour
+                Fmax=8.84 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=465.44 / hour,#Sm3/hour
-                #max_capacity=10,
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
         
         parts.add(
             pl.Boiler(
                 name='Boiler D',
-                eta=0.62, #0.77,
-                #Fmax=20 / hour,  # 930.89 / hour,  # Sm3/hour
+                eta= 0.77,
+                Fmax= 8.84 / hour,  # 930.89 / hour,  # Sm3/hour
                 # Fmin=465.44 / hour,#Sm3/hour
-                max_capacity=25,
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
         
@@ -286,70 +334,54 @@ class CityModel():
                 name='Waste Incinerator',
                 start_steps=12,
                 fuel=pl.Resources.waste,
-                alpha=0.43,
-                eta=0.83,
-                #Fmin=5 / hour,
-                #Fmax=15 /hour, # Update to reflect 25 MW output max according to D4.2 p 32
-                max_capacity= 15, 
+                alpha=0.46,
+                eta=0.81,
+                Fmin=10 / hour,
+                Fmax=45 /hour, # Update to reflect 25 MW output max according to D4.2 p 32 
                 taxation=taxation))        
-        """
-        parts.add(
-            pl.Accumulator(
-                resource=pl.Resources.heat,
-                max_flow=6/hour,
-                max_energy= None,
-                loss_factor = 0,
-                max_capacity = 25,
-                name='TES'))
         
         parts.add(
-            pl.HeatPump(
-                name='Heatpump',
-                COP=3,
-                Qmax=10 / hour,  # 930.89 / hour,  # Sm3/hour
-                # Fmin=465.44 / hour,#Sm3/hour
-                max_capacity=None,
-                taxation=taxation))    
+            pl.Accumulator(
+                name='TES',
+                resource=pl.Resources.heat,
+                max_flow=6/hour,
+                max_energy= 68,
+                loss_factor = 0))   
+
+        """ Investment alternatives for the scenarios"""
+        production_data = self.get_production_data()
 
         parts.add(
             pl.LinearSlowCHP(
-                name='CHP 1',
-                eta=0.776, # was 77.6
-                alpha=0.98,
-                Fmax=10 / hour,  # 449.0 / hour,  # 449 m3/hour
-                Fmin=2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
-                start_steps=int(np.round(.5 * hour)),
-                fuel=pl.Resources.natural_gas,
-                taxation=taxation))
+                name=production_data['CHP invest']['name'],
+                eta=production_data['CHP invest']['eta'], 
+                alpha=production_data['CHP invest']['alpha'], 
+                start_steps= production_data['CHP invest']['start_steps'],
+                max_capacity = production_data['CHP invest']['max_capacity'], 
+                fuel=production_data['CHP invest']['fuel'], 
+                taxation= production_data['CHP invest']['taxation'],
+                investment_cost = production_data['CHP invest']['investment_cost']))
 
         parts.add(
-            pl.Boiler(
-                name='Boiler 1',
-                eta=0.77,
-                Fmax=15 / hour,  # 930.89 / hour,  # Sm3/hour
-                # Fmin=465.44 / hour,#Sm3/hour
-                fuel=pl.Resources.natural_gas,
-                taxation=taxation))    
-                 
+            pl.Accumulator(
+                name=production_data['TES invest']['name'],
+                resource= production_data['TES invest']['resource'],
+                max_flow=production_data['TES invest']['max_flow'], 
+                max_energy= production_data['TES invest']['max_energy'], 
+                loss_factor = production_data['TES invest']['loss_factor'], 
+                max_capacity = production_data['TES invest']['max_capacity'],
+                investment_cost = production_data['TES invest']['investment_cost']))     
+        
         parts.add(
-            pl.Boiler(
-                name='Boiler 2',
-                eta=0.77,
-                #Fmax=20 / hour,  # 930.89 / hour,  # Sm3/hour
-                # Fmin=465.44 / hour,#Sm3/hour
-                max_capacity = 20,
-                fuel=pl.Resources.natural_gas,
-                taxation=taxation))
-
-        parts.add(
-            pl.HeatPump(
-                name='Heatpump 2',
-                COP=3,
-                #Qmax=20 / hour,  # 930.89 / hour,  # Sm3/hour
-                # Fmin=465.44 / hour,#Sm3/hour
-                max_capacity=20,
-                taxation=taxation)) 
-        """
+            pl.SolarPV(
+                name = production_data['SolarPV']['name'],
+                G = production_data['SolarPV']['G'],
+                T = production_data['SolarPV']['T'],
+                max_capacity = production_data['SolarPV']['max_capacity'],
+                #capacity = 10,
+                eta = production_data['SolarPV']['eta'], 
+                taxation = production_data['SolarPV']['taxation'], 
+                investment_cost = production_data['SolarPV']['investment_cost'])) 
         
         heat_producers = {p for p in parts
                           if ((pl.Resources.heat in p.production) or
@@ -414,7 +446,7 @@ class CityModel():
         heat=heat[order]
         heat *= pd.Timedelta('1h') / heat.index.freq
         print(heat)
-     
+
         storage_times = self.m.times_between(t_start, t_end)
         storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
         stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
@@ -422,12 +454,12 @@ class CityModel():
         
         p = heat.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
         p.get_legend()       
-        #s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
-        #s.get_legend().set_bbox_to_anchor((0.5, 1))
+        s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+        s.get_legend().set_bbox_to_anchor((0.5, 1))
         plt.show()
 
-        wasteMode = [p for p in self.m.descendants if isinstance(p, pl.LinearSlowCHP)]
-        wasteMode = {p.name: fs.get_series(p.modes['on'], storage_times) for p in wasteMode}
+        #wasteMode = [p for p in self.m.descendants if isinstance(p, pl.LinearSlowCHP)]
+        #wasteMode = {p.name: fs.get_series(p.modes['on'], storage_times) for p in wasteMode}
 
     def GetHeatLoad(self, p_equipment):
         heat_producers = [p for p in self.m.descendants

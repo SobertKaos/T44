@@ -6,7 +6,7 @@ import friendlysam as fs
 from itertools import chain, product
 from collections import OrderedDict
 from enum import Enum, unique
-from friendlysam import Constraint, VariableCollection
+from friendlysam import Constraint, VariableCollection 
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +26,7 @@ class Resources(Enum):
 class Boiler(fs.Node):
     """docstring for Boiler"""
 
-    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=1, max_capacity=None, **kwargs):
+    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=0, max_capacity=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
@@ -54,13 +54,15 @@ class Boiler(fs.Node):
 
 class Accumulator(fs.Node):
     def __init__(self, resource, max_flow, max_energy,
-                 loss_factor, name=None, max_capacity=None, **kwargs):
+                 loss_factor, name=None, max_capacity=None, investment_cost=0, **kwargs):
         super().__init__(**kwargs)
         with fs.namespace(self):
             self.volume = fs.VariableCollection(lb=0,
                                                 ub=max_energy,
                                                 name='Storage')
             cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
+            
+            inv = fs.Variable(domain=fs.Domain.binary)
 
         self.resource = resource
         self.consumption[self.resource] = lambda t: loss_factor * self.volume(t)
@@ -71,15 +73,19 @@ class Accumulator(fs.Node):
         self.accumulation[self.resource] = self.compute_accumulation
         self.constraints += self.max_change_constraints
 
+        self.max_capacity = max_capacity
+        self.inv = inv
         self.cap = cap
-        self.static_variables = {cap}
+        self.static_variables = {cap, inv}
 
         if max_capacity:
-            self.investment_cost = cap * 1
+            self.investment_cost = self.inv * self.max_capacity * investment_cost
             self.constraints += self.max_volume
+        else:
+            self.investment_cost = 0
 
     def max_volume(self, t):
-        return fs.LessEqual(self.volume(t), self.cap)
+        return fs.LessEqual(self.volume(t), self.inv*self.max_capacity)
 
     def compute_accumulation(self, index):
         return self.volume(index) - self.volume(self.step_time(index, -1))
@@ -134,7 +140,7 @@ class LinearSlowCHP(fs.Node):
     """docstring for LinearSlowCHP"""
 
     def __init__(self, start_steps=None, fuel=None, alpha=None, eta=None,
-                 Fmin=None, Fmax=None, max_capacity=None, taxation=None, **kwargs):
+                 Fmin=None, Fmax=None, max_capacity=None, taxation=None, investment_cost=0,**kwargs):
         super().__init__(**kwargs)
 
         mode_names = ('off', 'starting', 'on')
@@ -153,10 +159,10 @@ class LinearSlowCHP(fs.Node):
         if max_capacity:
             Fmin=0.2*max_capacity*(1 + alpha) / eta
             Fmax=max_capacity*(1 + alpha) / eta
-            self.investment_cost =  inv * max_capacity * 1
+            self.investment_cost =  inv * max_capacity * investment_cost
             self.constraints += self.max_production
         else:
-            self.investment_cost=0
+            self.investment_cost = 0
 
         self.consumption[fuel] = lambda t: F_on(t) + modes['starting'](t) * Fmin
         self.production[Resources.heat] = lambda t: F_on(t) * eta / (alpha + 1)
@@ -220,20 +226,20 @@ class HeatPump(fs.Node):
         return fs.LessEqual(self.production[Resources.heat](t), self.cap)
 
 class SolarPV(fs.Node):
-    def __init__(self, G=None, T=None, max_capacity = None, capacity = None, eta=None, taxation=None, running_cost=0,  **kwargs):        
+    def __init__(self, G=None, T=None, max_capacity=None, capacity=None, eta=None, taxation=None, running_cost=0, investment_cost=0,  **kwargs):        
         super().__init__(**kwargs)
-          
-        if max_capacity:  
-            with fs.namespace(self):              
+        
+        with fs.namespace(self):
+            if max_capacity:              
                 PV_cap = fs.Variable(lb=0, ub=max_capacity, name='PV_cap')
                 self.static_variables =  {PV_cap}
 
                 self.PV_cap = PV_cap
-                self.investment_cost = PV_cap * 0
+                self.investment_cost = PV_cap * investment_cost
                 self.constraints += self.max_production
-        else:
-            with fs.namespace(self): 
-                PV_cap = capacity
+            else:
+                with fs.namespace(self): 
+                    PV_cap = capacity
 
         c1 = -0.0177162
         c2 = -0.040289
@@ -241,14 +247,14 @@ class SolarPV(fs.Node):
         c4 = 0.000148
         c5 = 0.000169
         c6 = 0.000005
-          
+
         def prod(t):
             if G[t] == 0:
                 prod = PV_cap * 0  
             else: 
-                prod = PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
+                prod = prod = PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
             return prod
-        
+
         self.cost = lambda t: 0
         self.production[Resources.power] =lambda t: prod(t)
         self.state_variables = lambda t: {}
