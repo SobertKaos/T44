@@ -48,8 +48,8 @@ class DispatchModel(fs.Part):
         for p, t in product(parts, self.iter_times_between(self.time, self.time_end)):
             for v in p.state_variables(t):
                 v.take_value(solution)
-        
+
         for p in parts:
-            if 'static_variable' in dir(p):
+            if 'static_variables' in dir(p):
                 for v in p.static_variables:
-                    v.take_value(solution)
+                    v.take_value(solution)              
