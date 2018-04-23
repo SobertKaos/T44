@@ -22,7 +22,7 @@ class Resources(Enum):
 class Boiler(fs.Node):
     """docstring for Boiler"""
 
-    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=0, max_capacity=None, **kwargs):
+    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=1, max_capacity=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
