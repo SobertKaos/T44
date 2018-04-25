@@ -16,7 +16,9 @@ class Resources(Enum):
     power = 2
     heat = 3
     waste = 4
-    CO2 = 5
+    biomass = 5
+    CO2 = 6
+    
 
 
 class Boiler(fs.Node):
@@ -246,10 +248,10 @@ class HeatPump(fs.Node):
         return fs.LessEqual(self.production[Resources.heat](t), self.cap)
 
 class SolarPV(fs.Node):
-    def __init__(self, G=None, T=None, max_capacity=None, capacity=None, eta=None, taxation=None, running_cost=0, investment_cost=0,  **kwargs):        
+    def __init__(self, G=None, T=None, max_capacity=None, capacity=None, taxation=None, running_cost=0, investment_cost=0,  **kwargs):        
         super().__init__(**kwargs)
 
-        self.test = { 'capacity':capacity, 'eta':eta, 'investment_cost':investment_cost}
+        self.test = { 'max_capacity':max_capacity, 'taxation':taxation, 'investment_cost':investment_cost}
 
         Gstc=1
         Tstc=25
