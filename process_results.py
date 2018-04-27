@@ -1,97 +1,225 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import friendlysam as fs
-import partlib as pl
-from matplotlib import pyplot as plt
+import pdb
 
 
-def is_producer(part, resource):
-    if hasattr(part, 'production'):
-        return resource in part.production
-
-def is_consumer(part, resource):
-    if hasattr(part, 'consumption'):
-        return resource in part.consumption
-
-def is_accumulator(part, resource):
-    if hasattr(part, 'accumulation'):
-        return resource in part.accumulation
+def process_results(model, parameters, Resources, year, scenario):
 
 
-def save_results(year, scenario, results, output_data_path):
-    '''Export data to excel'''
-     
-    try:   
-        writer = pd.ExcelWriter(output_data_path+'output_%s_%s.xlsx' %(year,scenario), engine='xlsxwriter')
-        for sheet_name, data in results.items():
-            data.to_excel(writer, sheet_name='%s'%sheet_name)
-        writer.save()
+    m = model.m
+    parts=m.descendants
 
-    except PermissionError:
+    input_data = get_input_data(parts)
+    investment_data=get_investment_data(parts, scenario)
+    production = production_results(m, parameters, parts, Resources)
+    consumption = consumption_results(m, parameters, parts, Resources)
+    [total_results, static_variables] = get_total_results(m, parameters, parts, Resources, scenario)
+
+    total= {'input for existing units':input_data, 'input investment_data':investment_data, 'production':production, 
+    'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results}
+    save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
+
+def get_investment_data(parts, scenario):
+    """Gather the input data for the investment options in the model and returns it as a dictionary"""
+    investment_data={}
+    
+    if 'Trade_off' in scenario:
+        for part in parts:
+
+            if 'invest' in part.name:
+                temp={}
+                for item in part.test.items():
+                    key=item[0]
+                    temp[key]=item[1]
+                investment_data[part.name]=temp
+    else:
+        investment_data[scenario] = ['No investment alternatives in this scenario']
+    
+    return investment_data
+
+def get_input_data(parts):
+    """Gather the input data for the existing parts in the model and returns it as a dictionary"""
+    input_data={}
+
+
+    for part in parts:
+
+        if 'Existing' in part.name:
+            temp={}
+            for item in part.test.items():
+                key=item[0]
+                temp[key]=item[1]
+            input_data[part.name]=temp
+    
+    return input_data
+
+def consumption_results(m, parameters, parts, Resources):
+    """ Takes a model object, extracts and returns the consumption information."""
+    times = m.times_between(parameters['t_start'],parameters['t_end'])
+
+    def _is_consumer(part,resource):
+        if not isinstance(part, fs.FlowNetwork):
+            return resource in part.consumption
+
+
+    consumer_names = [p for p in m.descendants if _is_consumer(p,Resources.heat)]
+    consumers = {p.name: 
+                fs.get_series(p.consumption[Resources.heat], times) 
+                for p in consumer_names}
+    consumers = pd.DataFrame.from_dict(consumers)
+    return consumers
+
+def production_results(m, parameters, parts, Resources):
+    """ Takes a model object, extracts and returns the production information."""
+
+    def is_producer(part, resource):
+        if not isinstance(part, fs.FlowNetwork):
+            return resource in part.production
+
+    times = m.times_between(parameters['t_start'],parameters['t_end'])
+    heat_producers = [p for p in m.descendants
+                if is_producer(p, Resources.heat)] # list comprehension
+
+    heat = {p.name:
+        fs.get_series(p.production[Resources.heat], times)
+        for p in heat_producers}
+
+    heat = pd.DataFrame.from_dict(heat)
+    """
+    power_producers = [p for p in m.descendants
+        if is_producer(p, Resources.power)] 
+
+    power = {p.name:
+        fs.get_series(p.production[Resources.power], times)
+        for p in power_producers}
+
+    power = pd.DataFrame.from_dict(power) 
+
+    """
+    return heat
+    
+def get_total_results(m, parameters, parts, Resources, scenario):
+    """Gather the investment cost for the system, including which investment options to invest in"""
+    investment_cost={}
+    investment_cost_tot=0
+    static_variables={}
+    
+    if 'Trade_off' in scenario:
+        for part in parts:
+            if 'static_variables' in dir(part):
+                if hasattr(part, 'investment_cost'):
+                    investment_cost[part.name]=part.investment_cost.value
+                    investment_cost_tot += part.investment_cost.value
+
+                for v in part.static_variables:
+                    if v.value == 0:
+                        v.value = 'no investment'
+                    elif v.value == 1:
+                        v.value = 'yes invest max capacity'
+                    else:
+                        v.value = ('yes invest %s MW' %v.value)
+                    static_variables[part.name]=v.value
+    else:
+        static_variables[scenario] = ['No investment alternatives in this scenario']
+
+    """Running cost for the system, in this case it only includes fuel cost"""
+    from itertools import chain, product
+    cost={}
+    cost_tot=0
+    for part, t in product(parts, m.times_between(parameters['t_start'],parameters['t_end'])):
+        if part.cost(t):
+            cost[part.name]=part.cost(t).value
+            cost_tot += part.cost(t).value
+
+    """The CO2 emissions from the system"""
+    for part in parts:
+        if (not isinstance(part, fs.FlowNetwork)) and (not isinstance(part, fs.Cluster)):
+            if (Resources.CO2 in part.consumption):
+                times=m.times_between(parameters['t_start'],parameters['t_end'])
+                CO2_emissions = {part.name:
+                    fs.get_series(part.consumption[Resources.CO2], times)}
+
+                total_emissions=0
+                for CO2 in CO2_emissions.values():
+                    for row_index, row in CO2.iteritems():
+                        total_emissions += row
+
+    total_results={'investment cost [MEUR]':investment_cost_tot, 'running cost [EUR]': cost_tot, 
+                    'total emissions [kg]':total_emissions}
+    return total_results, static_variables
+
+def save_results_excel(m, parameters, year, scenario, results, output_data_path):
+    """Write the results to on excelfile for each year and scenario"""
+    import xlsxwriter
+    import datetime
+
+    try:
+        writer = pd.ExcelWriter(output_data_path+'output_%s_%s.xlsx' %(year, scenario), engine='xlsxwriter')
+
+        for item in results.items():
+            key=item[0]
+            data=item[1]
+            if type(data) == dict:
+                output=pd.Series(data)
+                output.to_excel(writer, sheet_name='%s'%key)
+            else:
+                output=pd.DataFrame(data)
+                output.to_excel(writer, sheet_name='%s'%key)
+        
+    except: 
         time=str(datetime.datetime.now().time())
         time=time.replace(":", ".")
         writer= pd.ExcelWriter(output_data_path+'output_%s_%s_%s.xlsx' %(year,scenario,time), engine='xlsxwriter')
-        for sheet_name, data in results.items():
-            data.to_excel(writer, sheet_name='%s'%sheet_name)
-        writer.save()
+        for item in results.items():
+            key=item[0]
+            data=item[1]
+            if type(data) == dict:
+                output=pd.DataFrame.from_dict([data])
+                output.to_excel(writer, sheet_name='%s'%key)
+            else:
+                output=pd.DataFrame(data)
+                output.to_excel(writer, sheet_name='%s'%key)
+    writer.save()
+    writer.close()
 
-    return None
+def DisplayResult(self):
+    from process_results import is_producer
 
-def get_production(parts, resource, times):
-    producers =  [p for p in parts if (is_producer(p, resource) and not isinstance(p, fs.Cluster))]
-    production = dict()
-
-    for p in producers:
-        production[p.name] = fs.get_series(p.production[resource], times)
-    production = pd.DataFrame.from_dict(production)
-    return production
-
-def get_consumption(parts, resource, times):
-    consumers = [p for p in parts if (is_consumer(p, resource) and not isinstance(p, fs.Cluster))]
-    consumption = dict()
-    for p in consumers:
-        consumption[p.name] = fs.get_series(p.consumption[resource], times)
-    consumption = pd.DataFrame.from_dict(consumption)
-    return consumption
-
-def get_accumulation(parts, resource, times):
-    accumulators = [p for p in parts if (is_accumulator(p, resource) and isinstance(p, pl.Accumulator))]
-    accumulation = dict()
-    for p in accumulators:
-        accumulation[p.name] = fs.get_series(p.volume, times)
-    accumulation = pd.DataFrame.from_dict(accumulation)
-    return accumulation
-    
-
-
-def process_results(model, output_data_path= None):
-    """ Takes a model object, extracts and returns relevant information.
-    If an output_data_path is supplied, writes the data. 
-    If no data path is provided it is only returned
-    """
-    times = model.times_between(model.time_start,model.time_end)
-
-    heat_produced = get_production(model.descendants, pl.Resources.heat, times)
-    heat_consumed = get_consumption(model.descendants, pl.Resources.heat, times)
-    heat_accumulated = get_accumulation(model.descendants, pl.Resources.heat, times)
-
-    power_produced = get_production(model.descendants, pl.Resources.power, times)   
-    power_consumed = get_consumption(model.descendants, pl.Resources.power, times)
-    power_accumulated = get_accumulation(model.descendants, pl.Resources.power, times)
+    t_start = self._DEFAULT_PARAMETERS['t_start']
+    t_end = self._DEFAULT_PARAMETERS['t_end']
+    heat_producers = [p for p in self.m.descendants
+                        if is_producer(p, pl.Resources.heat) and
+                        not isinstance(p, fs.Cluster)]
 
     
-
-    data = {'heat_producers': heat_produced,
-            'power_producers': power_produced,
-            'heat_consumers': heat_consumed,
-            'power_consumers': power_consumed,
-            'heat_accumulators': heat_accumulated,
-            'power_accumulators': power_accumulated}
-
-    if output_data_path:
-        save_results(year, scenario, data, output_data_path)
+    times = self.m.times_between(t_start, t_end)
     
-    return data
+    heat = {p.name: fs.get_series(p.production[pl.Resources.heat], times) for p in heat_producers}
+    heat = pd.DataFrame.from_dict(heat)
+
+    order =[]
+    for heat_producers in heat:
+        order.append(heat_producers)
+    heat=heat[order]
+    heat *= pd.Timedelta('1h') / heat.index.freq
+    print(heat)
+
+
+    storage_times = self.m.times_between(t_start, t_end)
+    storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
+    stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
+    stored_energy = pd.DataFrame.from_dict(stored_energy)
+    
+    p = heat.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+    p.get_legend()       
+    s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+    s.get_legend().set_bbox_to_anchor((0.5, 1))
+    plt.show()
+    plt.close()
+    #wasteMode = [p for p in self.m.descendants if isinstance(p, pl.LinearSlowCHP)]
+    #wasteMode = {p.name: fs.get_series(p.modes['on'], storage_times) for p in wasteMode}
+    return heat
 
 def display_results(data, save_figures = False):
     
@@ -106,156 +234,6 @@ def display_results(data, save_figures = False):
 
     plt.show()
     return None
-
-"""
-    def DisplayResult(self):
-        from process_results import is_producer
-
-        t_start = self._DEFAULT_PARAMETERS['t_start']
-        t_end = self._DEFAULT_PARAMETERS['t_end']
-        heat_producers = [p for p in self.m.descendants
-                          if is_producer(p, pl.Resources.heat) and
-                          not isinstance(p, fs.Cluster)]
-        
-        times = self.m.times_between(t_start, t_end)
-        
-        heat = {p.name: fs.get_series(p.production[pl.Resources.heat], times) for p in heat_producers}
-        heat = pd.DataFrame.from_dict(heat)
-        other = ['Boiler A',
-                 'Boiler B',
-                 'Boiler C',
-                 'Boiler D']
-        heat['Other'] = heat[other].sum(axis=1)
-        for key in other:
-            del heat[key]
-
-        order = ['Waste Incinerator',
-                 'CHP A',
-                 'CHP B',
-                 'Other']
-        heat = heat[order]
-        heat *= pd.Timedelta('1h') / heat.index.freq
-        print(heat)
-
-        storage_times = self.m.times_between(t_start+pd.Timedelta('2h'), t_end)
-        storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
-        stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
-        stored_energy = pd.DataFrame.from_dict(stored_energy)
-
-        p = heat.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
-        p.get_legend().set_bbox_to_anchor((0.5, 1))
-        s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
-        s.get_legend().set_bbox_to_anchor((0.5, 1))
-        plt.show()
-
-    def GetHeatLoad(self, p_equipment):
-        heat_producers = [p for p in self.m.descendants
-                          if is_producer(p, pl.Resources.heat) and not
-                          isinstance(p, fs.Cluster)]
-
-        times = self.m.times_between(t_start, t_end)
-
-        heat = {p.name: fs.get_series(p.production[pl.Resources.heat], times)
-                for p in heat_producers}
-        heat = pd.DataFrame.from_dict(heat)
-
-        heatLoadWithTimestamps = heat[p_equipment].to_dict()
-        heatLoad = dict()
-        for elem in heatLoadWithTimestamps:
-            heatLoad[str(elem.to_pydatetime())] = heatLoadWithTimestamps[elem]
-
-        return heatLoad
-
-    def GetPowerLoad(self, p_equipment):
-        power_producers = [p for p in self.m.descendants
-                           if is_producer(p, Resources.power) and
-                           not isinstance(p, fs.Cluster)]
-
-        times = self.m.times_between(self.t0, self.t_end)
-
-        power = {p.name: fs.get_series(p.production[Resources.power], times)
-                 for p in power_producers}
-        power = pd.DataFrame.from_dict(power)
-
-        powerLoadWithTimestamps = power[p_equipment].to_dict()
-        powerLoad = dict()
-        for elem in powerLoadWithTimestamps:
-            powerLoad[str(elem.to_pydatetime())] = powerLoadWithTimestamps[elem]
-
-        return powerLoad
-
-    def GetNaturalGasConsumption(self, p_equipment):
-        gas_consummers = [p for p in self.m.descendants
-                          if is_consumer(p, Resources.natural_gas) and
-                          not isinstance(p, fs.Cluster)]
-
-        times = self.m.times_between(self.t0, self.t_end)
-
-        gas = {p.name: fs.get_series(p.consumption[Resources.natural_gas], times)
-               for p in gas_consummers}
-        gas = pd.DataFrame.from_dict(gas)
-
-        gasLoadWithTimestamps = gas[p_equipment].to_dict()
-        gasLoad = dict()
-        for elem in gasLoadWithTimestamps:
-            gasLoad[str(elem.to_pydatetime())] = gasLoadWithTimestamps[elem]
-
-        return gasLoad
-
-    def WriteLoadToCsv(self, pLoad, pPath, pFilename):
-        writer = csv.DictWriter(open(pPath + '/' + pFilename, 'w'),
-                                fieldnames=['Time', 'Load'])
-        writer.writeheader()
-        for elem in pLoad:
-            writer.writerow({'Time': elem, 'Load': pLoad[elem]})
-
-    def OutputResults(self, pPath):
-        #  write time series
-        self.WriteLoadToCsv(self.GetHeatLoad('Boiler A'), pPath, 'BoilerA_heat.csv')
-        self.WriteLoadToCsv(self.GetHeatLoad('Boiler B'), pPath, 'BoilerB_heat.csv')
-        self.WriteLoadToCsv(self.GetHeatLoad('Boiler C'), pPath, 'BoilerC_heat.csv')
-        self.WriteLoadToCsv(self.GetHeatLoad('Boiler D'), pPath, 'BoilerD_heat.csv')
-        self.WriteLoadToCsv(self.GetHeatLoad('CHP A'), pPath, 'CHPA_heat.csv')
-        self.WriteLoadToCsv(self.GetHeatLoad('CHP B'), pPath, 'CHPB_heat.csv')
-        self.WriteLoadToCsv(self.GetHeatLoad('Waste Incinerator'), pPath, 'Waste_heat.csv')
-        self.WriteLoadToCsv(self.GetPowerLoad('CHP A'), pPath, 'CHPA_power.csv')
-        self.WriteLoadToCsv(self.GetPowerLoad('CHP B'), pPath, 'CHPB_power.csv')
-        self.WriteLoadToCsv(self.GetNaturalGasConsumption('CHP A'), pPath, 'CHPA_gas.csv')
-        self.WriteLoadToCsv(self.GetNaturalGasConsumption('CHP B'), pPath, 'CHPB_gas.csv')
-        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler A'), pPath, 'BoilerA_gas.csv')
-        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler B'), pPath, 'BoilerB_gas.csv')
-        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler C'), pPath, 'BoilerC_gas.csv')
-        self.WriteLoadToCsv(self.GetNaturalGasConsumption('Boiler D'), pPath, 'BoilerD_gas.csv')
-
-        #  write sums for the whole simulation
-        writer = open(pPath + '/KPIs.csv', 'w')
-        writer.write("DeliveredGas,ExportedHeat,ExportedPower\n")
-        print(self.TotalDeliveredGas())
-        print(self.TotalExportedHeat())
-        print(self.TotalExportedPower())
-        writer.write(str(self.TotalDeliveredGas())+","+str(self.TotalExportedHeat())+","+str(self.TotalExportedPower())+"\n")
-        writer.close()
-
-    def TotalDeliveredGas(self):
-        res = 0
-        for equipment in ['Boiler A', 'Boiler B', 'Boiler C',
-                          'Boiler D', 'CHP A', 'CHP B']:
-            res += sum(self.GetNaturalGasConsumption(equipment).values())
-        return res
-
-    def TotalExportedHeat(self):
-        res = 0
-        for equipment in ['Boiler A', 'Boiler B', 'Boiler C',
-                          'Boiler D', 'CHP A', 'CHP B', 'Waste Incinerator']:
-            res += sum(self.GetHeatLoad(equipment).values())
-        return res
-
-    def TotalExportedPower(self):
-        res = 0
-        for equipment in ['CHP A', 'CHP B', 'Waste Incinerator']:
-            res += sum(self.GetPowerLoad(equipment).values())
-        return res
-    """
 
 if __name__ == '__main__':
     pass
