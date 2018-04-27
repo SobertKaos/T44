@@ -177,7 +177,16 @@ class CityModel():
         #heat_history = self.get_heat_history(parameters['time_unit'])
         hour = pd.Timedelta('1h') / parameters['time_unit']
         series_reader = lambda series: series.loc.__getitem__
+
+        """ """
+        heat_history = self.get_heat_history(parameters['time_unit'])
+        
+        #test = series_reader(heat_history.sum(axis=1))
+
+        """ """
+
         city = fs.Node(name='City')
+
         import math
         city.consumption[pl.Resources.heat] = lambda t: 30 + 5*math.sin(t.value)
         #series_reader(heat_history)
@@ -379,4 +388,4 @@ if __name__ == "__main__":
 
             from process_results import process_results
             process_results(model, parameters, pl.Resources, year, scenario)
-    
+   

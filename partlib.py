@@ -140,7 +140,6 @@ class LinearCHP(fs.Node):
         self.production[Resources.power] = lambda t: alpha * F(t) * eta / (alpha + 1)
 
         self.cost = lambda t: F(t) * running_cost  #_CHP_cost_func(self, taxation, fuel)
-
         self.state_variables = lambda t: {F(t)}
 
         self.cap = cap
@@ -277,7 +276,6 @@ class SolarPV(fs.Node):
             if max_capacity:              
                 PV_cap = fs.Variable(lb=0, ub=max_capacity, name='PV_cap')
                 self.static_variables =  {PV_cap}
-
                 self.PV_cap = PV_cap
                 self.investment_cost = PV_cap * investment_cost
                 self.constraints += self.max_production
