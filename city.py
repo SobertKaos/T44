@@ -21,7 +21,7 @@ print("using python version", sys.version)
 
 class CityModel():
 
-    def __init__(self):
+    def __init__(self, input_data, input_parameters, year=None, scenario=None):
         print('Initializing model')
         self.m = None
         self.solution = None
@@ -37,11 +37,11 @@ class CityModel():
                 pl.Resources.biomass: 7777,
                 pl.Resources.CO2: 0
                 },
-            'CO2_factor': { # kg/TJ * TJ/MWh --> kg/MWh (only count fossil CO2)
-                pl.Resources.natural_gas: 55.1514*10**3 * 0.003600,
-                pl.Resources.power: 324.135, #from Marias calculations, should change to 2050
+            'CO2_factor': { # kg/TJ * TJ/MWh --> kg/MWh (only count fossil CO2) Hur ska jag göra med conversion factor
+                pl.Resources.natural_gas: 0,
+                pl.Resources.power: 0,
                 pl.Resources.heat: 0,
-                pl.Resources.waste: 49.963*10**3 * 0.003600,
+                pl.Resources.waste: 0,
                 pl.Resources.biomass: 0,
                 pl.Resources.CO2: 0
                 }
@@ -55,7 +55,7 @@ class CityModel():
         t_end = parameters['t_end']
 
         print("Making model")
-        self.m = self.make_model(parameters, seed=seed)
+        self.m = self.make_model(parameters, input_data, year, scenario, seed=seed)
         #self.m.time= t_start
         #self.m.time_end= t_end
         #self.m.solver = fs.get_solver()
@@ -66,7 +66,6 @@ class CityModel():
         _elapsed = _end_time-_start_time
         print('Done! Simulation took {0:0.0f} seconds'.format(_elapsed.total_seconds()))
         
-        
 
     def set_heat_history(self, p_heat_history):
         self.heat_history_file = p_heat_history
@@ -76,9 +75,6 @@ class CityModel():
 
     def set_power_price(self, p_power_price):
         self.power_price_file = p_power_price
-
-    def set_fixed_price(self, p_fixed_price):
-        self.fixed_price_file = p_fixed_price
 
     def read_csv(self, file_path, index_col = 'Time (UTC)', **kwargs):
         read_file = pd.read_csv(file_path,
@@ -105,52 +101,6 @@ class CityModel():
                 squeeze=True)
         return solar_data.resample(time_unit).sum()
     
-    def get_read_data(self, **kwargs):
-        from read_data import read_data
-        data = read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data.xlsx')
-        pdb.set_trace()
-        return data
-
-    def get_production_data(self, **kwargs):
-        
-        parameters = self.get_parameters() 
-        solar_data=self.get_solar_data(parameters['time_unit'])
-
-        production_data = {
-            'CHP invest' :{
-            'name': 'CHP invest',
-            'eta' : 0.75, #Titta så att den här är rätt, är eta = n_el + n__thermal??
-            'alpha' : 0.98, #Kontrollera denna, är alpha = n_el/n_thermal --> 0.5.
-            'start_steps' : int(np.round(0.5*1)),#bytte ut hour mot 1 här för att få det att fungera.
-            'max_capacity' : 35,
-            'fuel' : pl.Resources.natural_gas, #data['inv_2030']['CHP invest']['fuel']
-            'taxation' : 1,  #ska vara taxation här men fick inte rätt då
-            'investment_cost' : 1
-            },
-
-            'SolarPV' : {
-                'name' : 'SolarPV invest',
-                'G' : solar_data['irradiation'],
-                'T' : solar_data['temperature'], 
-                'max_capacity' : 30,
-                'capacity' : 10,
-                'taxation' : None, 
-                'investment_cost' : 1
-            },
-   
-            'Accumulator invest':{
-            'name' : 'Accumulator invest',
-            'resource' : pl.Resources.heat,
-            'max_flow' : 20/1, #Bytte ut hour mot 1. Ska max_flow vara 6 för denna också?
-            'max_energy' : 80, 
-            'loss_factor' : 0,
-            'max_capacity' : 20,
-            'investment_cost' : 1
-            }
-        }
-          
-        return production_data
-
     def get_power_demand(self, time_unit):
         power_demand = self.read_csv(self.power_demand_file, squeeze=True)
         return power_demand.resample(time_unit).sum()
@@ -163,9 +113,13 @@ class CityModel():
     def get_parameters(self, **kwargs):
         parameters = deepcopy(self._DEFAULT_PARAMETERS)
         parameters.update(kwargs)
+        for resource in pl.Resources:
+            conversion_factor=0.003600 #To convert CO2 factor from kg/TJ to kg/MWh
+            parameters['prices'][resource] = input_parameters['prices'][resource.name]
+            parameters['CO2_factor'][resource] = input_parameters['CO2_factor'][resource.name]*conversion_factor
         return parameters
 
-    def make_model(self, parameters, seed=None):
+    def make_model(self, parameters, input_data, year=None, scenario=None, seed=None):
         if seed:
             raise NotImplementedError('Randomizer not yet supported')
         print("building model")
@@ -203,7 +157,6 @@ class CityModel():
         #power_demand = self.get_power_demand(parameters['time_unit'])
         #heat_history_industry = self.get_heat_history_industry(parameters['time_unit'])
         taxation = make_tax_function(parameters)
-
         for r in pl.Resources:
             if r is not pl.Resources.heat:
                 if r is not pl.Resources.CO2:
@@ -274,7 +227,7 @@ class CityModel():
                 #start_steps=int(np.round(.5 * hour)),
                 fuel=pl.Resources.natural_gas,
                 taxation=taxation))
-        
+
         parts.add(
             pl.LinearSlowCHP(
                 name='Existing CHP B',
@@ -342,71 +295,39 @@ class CityModel():
                 loss_factor = 0))   
 
         """ Investment alternatives for the scenarios"""
-        data = self.get_read_data()
         solar_data=self.get_solar_data(parameters['time_unit'])
-        """
-        parts.add(
-            pl.LinearSlowCHP(
-                name=production_data['CHP invest']['name'],
-                eta=production_data['CHP invest']['eta'], 
-                alpha=production_data['CHP invest']['alpha'], 
-                start_steps= production_data['CHP invest']['start_steps'],
-                max_capacity = production_data['CHP invest']['max_capacity'], 
-                fuel=production_data['CHP invest']['fuel'], 
-                taxation= production_data['CHP invest']['taxation'],
-                investment_cost = production_data['CHP invest']['investment_cost']))
-        
-        parts.add(
-            pl.Accumulator(
-                name=production_data['Accumulator invest']['name'],
-                resource= production_data['Accumulator invest']['resource'],
-                max_flow=production_data['Accumulator invest']['max_flow'], 
-                max_energy= production_data['Accumulator invest']['max_energy'], 
-                loss_factor = production_data['Accumulator invest']['loss_factor'], 
-                max_capacity = production_data['Accumulator invest']['max_capacity'],
-                investment_cost = production_data['Accumulator invest']['investment_cost']))     
-        
-        parts.add(
-            pl.SolarPV(
-                name = production_data['SolarPV']['name'],
-                G = production_data['SolarPV']['G'],
-                T = production_data['SolarPV']['T'],
-                max_capacity = production_data['SolarPV']['max_capacity'],
-                capacity = production_data['SolarPV']['capacity'],
-                taxation = production_data['SolarPV']['taxation'], 
-                investment_cost = production_data['SolarPV']['investment_cost'])) 
-        """
-        year='2030'
-        parts.add(
-            pl.LinearSlowCHP(
-            name = data['inv_'+year]['CHP invest']['name'],
-            eta = data['inv_'+year]['CHP invest']['eta'], #Titta så att den här är rätt, är eta = n_el + n__thermal??
-            alpha = data['inv_'+year]['CHP invest']['alpha'], #Kontrollera denna, är alpha = n_el/n_thermal --> 0.5.
-            start_steps = int(np.round(0.5*1)),#bytte ut hour mot 1 här för att få det att fungera.
-            max_capacity = data['inv_'+year]['CHP invest']['max_capacity'],
-            fuel = pl.Resources.natural_gas, #data['inv_2030']['CHP invest']['fuel']
-            taxation = data['inv_'+year]['CHP invest']['taxation'],  #ska vara taxation här men fick inte rätt då
-            investment_cost = data['inv_'+year]['CHP invest']['investment_cost']))
 
         parts.add(
-            pl.SolarPV(
-                name = data['inv_'+year]['SolarPV invest']['name'],
-                G = solar_data['irradiation'],
-                T = solar_data['temperature'], 
-                max_capacity = data['inv_'+year]['SolarPV invest']['max_capacity'],
-                #capacity = data['inv_'+year]['SolarPV invest']['capacity'], #Eller capacity borde väl inte anges för investment option
-                taxation = data['inv_'+year]['SolarPV invest']['taxation'], 
-                investment_cost = data['inv_'+year]['SolarPV invest']['investment_cost']))
+            pl.LinearSlowCHP(
+            name = input_data['CHP']['name'],
+            eta = input_data['CHP']['eta'], #Titta så att den här är rätt, är eta = n_el + n__thermal??
+            alpha = input_data['CHP']['alpha'], #Kontrollera denna, är alpha = n_el/n_thermal --> 0.5.
+            start_steps = int(np.round(0.5*1)),#bytte ut hour mot 1 här för att få det att fungera.
+            capacity = input_data['CHP']['capacity'],
+            max_capacity = input_data['CHP']['max_capacity'],
+            fuel = pl.Resources.natural_gas, #data['inv_2030']['CHP invest']['fuel']
+            taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
+            investment_cost = input_data['CHP']['investment_cost']))
         
         parts.add(
+            pl.SolarPV(
+                name = input_data['SolarPV']['name'],
+                G = solar_data['irradiation'],
+                T = solar_data['temperature'], 
+                max_capacity = input_data['SolarPV']['max_capacity'],
+                capacity = input_data['SolarPV']['capacity'], #Eller capacity borde väl inte anges för investment option
+                taxation = input_data['SolarPV']['taxation'], 
+                investment_cost = input_data['SolarPV']['investment_cost']))
+
+        parts.add(
             pl.Accumulator(
-                name = data['inv_'+year]['Accumulator invest']['name'],
-                resource = data['inv_'+year]['Accumulator invest']['resource'],
-                max_flow = data['inv_'+year]['Accumulator invest']['max_flow'], #Bytte ut hour mot 1. Ska max_flow vara 6 för denna också?
-                max_energy = data['inv_'+year]['Accumulator invest']['max_energy'], 
-                loss_factor = data['inv_'+year]['Accumulator invest']['loss_factor'],
-                max_capacity = data['inv_'+year]['Accumulator invest']['max_capacity'],
-                investment_cost = data['inv_'+year]['Accumulator invest']['investment_cost']))
+                name = input_data['Accumulator']['name'],
+                resource = pl.Resources.heat, #data['Accumulator']['resource'],
+                max_flow = input_data['Accumulator']['max_flow'], #Bytte ut hour mot 1. Ska max_flow vara 6 för denna också?
+                max_energy = input_data['Accumulator']['max_energy'], 
+                loss_factor = input_data['Accumulator']['loss_factor'],
+                max_capacity = input_data['Accumulator']['max_capacity'],
+                investment_cost = input_data['Accumulator']['investment_cost']))
         
         heat_producers = {p for p in parts
                           if ((pl.Resources.heat in p.production) or
@@ -434,91 +355,28 @@ class CityModel():
         consumption_cluster.add_part(powerExport)
         parts.add(consumption_cluster)
 
-
         pipe = fs.FlowNetwork(pl.Resources.heat)
         pipe.cost = lambda t: 0
         pipe.connect(production_cluster, consumption_cluster)
         parts.add(pipe)
-        
+
         return parts
-    
-    def DisplayResult(self):
-        from process_results import is_producer
-
-        t_start = self._DEFAULT_PARAMETERS['t_start']
-        t_end = self._DEFAULT_PARAMETERS['t_end']
-        heat_producers = [p for p in self.m.descendants
-                          if is_producer(p, pl.Resources.heat) and
-                          not isinstance(p, fs.Cluster)]
         
-        times = self.m.times_between(t_start, t_end)
-        
-        heat = {p.name: fs.get_series(p.production[pl.Resources.heat], times) for p in heat_producers}
-        heat = pd.DataFrame.from_dict(heat)
-
-        storage_times = self.m.times_between(t_start, t_end)
-        storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
-        stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
-        stored_energy = pd.DataFrame.from_dict(stored_energy)
-
-        p = heat.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
-        p.get_legend()       
-        s = stored_energy.plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
-        s.get_legend().set_bbox_to_anchor((0.5, 1))
-        plt.show()
-        plt.close()
-            
-        return 
-
-    def save_results(self, year, scenario, results, output_data_path):#, heat, power):
-        import xlsxwriter
-        #this writes the production_data to an excel_sheet, but does not include the values...
-        try:   
-            workbook=xlsxwriter.Workbook(output_data_path+'output_%s_%s.xlsx' %(year, scenario))
-            worksheet = workbook.add_worksheet()
-            row = 0
-            col= 0
-
-            for key in results.keys():
-                worksheet.write(row, col, key)
-                for item in results[key]:
-                    worksheet.write(row, col+1, item)
-                    row += 1
-            workbook.close()
-
-        except PermissionError:
-            time=str(datetime.datetime.now().time())
-            time=time.replace(":", ".")
-            writer= pd.ExcelWriter(output_data_path+'output_%s_%s_%s.xlsx' %(year,scenario,time), engine='xlsxwriter')
-            for sheet_name, data in results.items():
-                data.to_excel(writer, sheet_name='%s'%sheet_name)
-            writer.save()
-
-        """
-        writer = pd.ExcelWriter(output_data_path+'output_%s_%s.xlsx' %(year,scenario), engine='xlsxwriter')
-
-        #this does not accept e.g. resources.natural_gas as an input
-        results = pd.DataFrame(results)
-        import pdb
-
-        for sheet_name, data in results.items():
-            data.to_excel(writer)#, float_format='x', na_rep = 'Nan')#sheet_name='%s'%sheet_name)
-        writer.save()
-        """
-        return
 
 if __name__ == "__main__":
     print('Running city.py standalone')
     import pdb  
-    model = CityModel()
-    model.RunModel()
-    parameters = model.get_parameters()
+    from read_data import read_data
+    data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    from process_results import process_results
-    process_results(model, parameters, pl.Resources)
-            
+    for year in ['2030', '2050']:
+        input_parameters=data[year+'_input_parameters']
+        for scenario in ['BAU','Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+            input_data=data[year+'_'+scenario]
+            model = CityModel(input_data, input_parameters, year, scenario)
+            model.RunModel()
+            parameters = model.get_parameters()
+
+            from process_results import process_results
+            process_results(model, parameters, pl.Resources, year, scenario)
     
-    """
-    production_data = model.get_production_data()
-    model.save_results('2030', 'BAU', production_data, 'C:/Users/lovisaax/Desktop/test/')
-    """
