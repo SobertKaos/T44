@@ -101,5 +101,3 @@ ENV/
 
 # input data
 data_path.txt
-*.lp
-*.sol

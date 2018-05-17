@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import friendlysam as fs
-import partlib as pl
 import pdb
 
 def process_results(model, parameters, Resources, year, scenario):
@@ -11,21 +10,18 @@ def process_results(model, parameters, Resources, year, scenario):
 
     input_data = get_input_data(parts)
     investment_data=get_investment_data(parts, scenario)
-    heat_production, power_production = production_results(m, parameters, parts, Resources)
+    production = production_results(m, parameters, parts, Resources)
     consumption = consumption_results(m, parameters, parts, Resources)
     [total_results, static_variables] = get_total_results(m, parameters, parts, Resources, scenario)
 
-    stored_energy = accumulator_results(m, parameters, parts, Resources)
-
-    total= {'input for existing units':input_data, 'input investment_data':investment_data, 
-    'heat_production':heat_production, 'power_production':power_production,
-    'consumption':consumption, 'invest or not': static_variables, 
-    'total cost and emissions':total_results, 'stored energy': stored_energy}
+    total= {'input for existing units':input_data, 'input investment_data':investment_data, 'production':production, 
+    'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results}
     save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
 
 def get_investment_data(parts, scenario):
     """Gather the input data for the investment options in the model and returns it as a dictionary"""
     investment_data={}
+    
     if 'Trade_off' in scenario:
         for part in parts:
 
@@ -60,7 +56,7 @@ def consumption_results(m, parameters, parts, Resources):
     times = m.times_between(parameters['t_start'],parameters['t_end'])
 
     def _is_consumer(part,resource):
-        if not isinstance(part, fs.FlowNetwork) and not isinstance(part, fs.Cluster):
+        if not isinstance(part, fs.FlowNetwork):
             return resource in part.consumption
 
     consumer_names = [p for p in m.descendants if _is_consumer(p,Resources.heat)]
@@ -74,7 +70,7 @@ def production_results(m, parameters, parts, Resources):
     """ Takes a model object, extracts and returns the production information."""
 
     def is_producer(part, resource):
-        if not isinstance(part, fs.FlowNetwork) and not isinstance(part, fs.Cluster):
+        if not isinstance(part, fs.FlowNetwork):
             return resource in part.production
 
     times = m.times_between(parameters['t_start'],parameters['t_end'])
@@ -86,7 +82,7 @@ def production_results(m, parameters, parts, Resources):
         for p in heat_producers}
 
     heat = pd.DataFrame.from_dict(heat)
-    
+    """
     power_producers = [p for p in m.descendants
         if is_producer(p, Resources.power)] 
 
@@ -96,18 +92,9 @@ def production_results(m, parameters, parts, Resources):
 
     power = pd.DataFrame.from_dict(power) 
 
+    """
+    return heat
     
-    return heat, power
-
-def accumulator_results(m, parameters, parts, Resources):
-    storage_times = m.times_between(parameters['t_start'],parameters['t_end'])
-    storage = [p for p in m.descendants if isinstance(p, pl.Accumulator)]
-    stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
-    stored_energy = pd.DataFrame.from_dict(stored_energy)
-    
-    return stored_energy
-
-
 def get_total_results(m, parameters, parts, Resources, scenario):
     """Gather the investment cost for the system, including which investment options to invest in"""
     investment_cost={}
@@ -117,11 +104,7 @@ def get_total_results(m, parameters, parts, Resources, scenario):
     if 'Trade_off' in scenario:
         for part in parts:
             if 'static_variables' in dir(part):
-                import numbers
-                if isinstance(part.investment_cost, numbers.Number):
-                    investment_cost[part.name] = part.investment_cost
-                    investment_cost_tot += part.investment_cost
-                else:
+                if hasattr(part, 'investment_cost'):
                     investment_cost[part.name]=part.investment_cost.value
                     investment_cost_tot += part.investment_cost.value
 
@@ -179,7 +162,7 @@ def save_results_excel(m, parameters, year, scenario, results, output_data_path)
             else:
                 output=pd.DataFrame(data)
                 output.to_excel(writer, sheet_name='%s'%key)
-        writer.save()
+        
     except: 
         time=str(datetime.datetime.now().time())
         time=time.replace(":", ".")
@@ -188,12 +171,12 @@ def save_results_excel(m, parameters, year, scenario, results, output_data_path)
             key=item[0]
             data=item[1]
             if type(data) == dict:
-                output=pd.Series(data)
+                output=pd.DataFrame.from_dict([data])
                 output.to_excel(writer, sheet_name='%s'%key)
             else:
                 output=pd.DataFrame(data)
                 output.to_excel(writer, sheet_name='%s'%key)
-        writer.save()
+    writer.save()
     writer.close()
 
 def DisplayResult(self):
