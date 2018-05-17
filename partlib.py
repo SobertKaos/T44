@@ -25,7 +25,7 @@ class Boiler(fs.Node):
     """docstring for Boiler"""
 
     def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, 
-                investment_cost = None, running_cost=1, max_capacity=None, **kwargs):
+                investment_cost = 0, running_cost=1, max_capacity=None, annual_cost= None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
@@ -47,10 +47,10 @@ class Boiler(fs.Node):
 
         if max_capacity:
             self.constraints += self.max_production
-            self.investment_cost = cap * investment_cost
+            self.investment_cost = cap * annual_cost
             self.static_variables = {cap}
         else: 
-            #self.investment_cost =  investment_cost
+            self.investment_cost =  investment_cost
             self.static_variables = {}
 
     def max_production(self, t):
@@ -58,7 +58,7 @@ class Boiler(fs.Node):
 
 class Accumulator(fs.Node):
     def __init__(self, resource=None, max_flow=0, max_energy=0,
-                 loss_factor=0, max_capacity=None, investment_cost=None,  **kwargs):
+                 loss_factor=0, max_capacity=None, investment_cost=0, annual_cost=None,  **kwargs):
         super().__init__(**kwargs)
         with fs.namespace(self):
             self.volume = fs.VariableCollection(lb=0,
@@ -70,8 +70,11 @@ class Accumulator(fs.Node):
         if max_capacity == 'None':
             max_capacity = None
         self.test={'resource':resource, 'max_flow':max_flow, 'max_energy': max_energy, 'loss_factor':loss_factor,
-                    'max_capacity':max_capacity, 'investment_cost':investment_cost}
+                    'max_capacity':max_capacity, 'investment_cost':investment_cost, 'annual_cost': annual_cost}
         
+        #self.t_start = t_start
+        #self.t_end = t_end
+
         self.resource = resource
         self.consumption[self.resource] = lambda t: loss_factor * self.volume(t)
         self.max_flow = max_flow
@@ -86,19 +89,26 @@ class Accumulator(fs.Node):
         
 
         if max_capacity:
-            self.investment_cost = self.inv * self.max_capacity * investment_cost
+            self.investment_cost = self.inv * self.max_capacity * annual_cost
             self.constraints += self.max_volume
             self.static_variables = {inv}
         else:
-            #self.investment_cost = investment_cost
+            self.investment_cost = investment_cost
             self.static_variables = {}
 
         self.constraints += self.start_end_volume
 
     def start_end_volume(self, t):
+        import pdb
         import pandas as pd
-        return fs.Eq(self.volume(pd.Timestamp('2015-01-01 00:00')),
-                     self.volume(pd.Timestamp('2015-01-02 00:00'))
+        #t_end = self.t_end
+        #t_start = self.t_start
+        #time= t_start + '00:00'
+        #return fs.Eq(self.volume(t_start), #var 2015 förut
+        #             self.volume(t_end)  #var 2015 förut
+        #            )
+        return fs.Eq(self.volume(pd.Timestamp('2017-01-01 00:00')), #var 2015 förut
+                     self.volume(pd.Timestamp('2017-01-30 00:00'))  #var 2015 förut
                     )    
 
     def max_volume(self, t):
@@ -128,7 +138,7 @@ class LinearCHP(fs.Node):
     """docstring for LinearCHP"""
 
     def __init__(self, fuel=None, alpha=None, eta=None, Fmax=None, taxation=None, 
-                investment_cost=None, running_cost=0, max_capacity=None, **kwargs):        
+                investment_cost=0, running_cost=0, max_capacity=None, **kwargs):        
         super().__init__(**kwargs)
 
         with fs.namespace(self):
@@ -161,7 +171,7 @@ class LinearSlowCHP(fs.Node):
     """docstring for LinearSlowCHP"""
 
     def __init__(self, start_steps=None, fuel=None, alpha=None, eta=None, capacity=None,
-                 Fmin=None, Fmax=None, max_capacity=None, taxation=None, investment_cost=None,**kwargs):
+                 Fmin=None, Fmax=None, max_capacity=None, taxation=None, investment_cost=0, annual_cost=None, **kwargs):
         super().__init__(**kwargs)
 
         mode_names = ('off', 'starting', 'on')
@@ -175,7 +185,7 @@ class LinearSlowCHP(fs.Node):
 
         self.test={'start_steps': start_steps, 'fuel':fuel, 'alpha':alpha, 'eta':eta, 'capacity':capacity, 
                     'Fmin':Fmin, 'Fmax':Fmax, 'max_capacity':max_capacity, 'taxation':taxation, 
-                    'investment_cost':investment_cost}
+                    'investment_cost':investment_cost, 'annual_cost': annual_cost}
 
         self.max_capacity= max_capacity
         self.inv = inv
@@ -184,16 +194,16 @@ class LinearSlowCHP(fs.Node):
         if max_capacity:
             Fmin=0.2*max_capacity*(1 + alpha) / eta
             Fmax=max_capacity*(1 + alpha) / eta
-            self.investment_cost =  inv * max_capacity * investment_cost
+            self.investment_cost =  inv * max_capacity * annual_cost
             self.constraints += self.max_production
             self.static_variables =  {inv}
         elif capacity:
             Fmin=0.2*capacity*(1 + alpha) / eta
             Fmax=capacity*(1 + alpha) / eta
-            #self.investment_cost = investment_cost
+            self.investment_cost = investment_cost
             self.static_variables =  {}
         else:
-            #self.investment_cost = investment_cost
+            self.investment_cost = investment_cost
             self.static_variables =  {}
 
         self.consumption[fuel] = lambda t: F_on(t) + modes['starting'](t) * Fmin
@@ -261,11 +271,11 @@ class HeatPump(fs.Node):
 
 class SolarPV(fs.Node):
     def __init__(self, G=None, T=None, max_capacity=None, capacity=None, taxation=None, 
-                running_cost=0, investment_cost=None,  **kwargs):        
+                running_cost=0, investment_cost=0, annual_cost=None,  **kwargs):        
         super().__init__(**kwargs)
 
         self.test = {'max_capacity':max_capacity, 'capacity':capacity, 'taxation':taxation, 
-                    'investment_cost':investment_cost}
+                    'investment_cost':investment_cost, 'annual_cost': annual_cost}
 
         Gstc=1
         Tstc=25
@@ -279,7 +289,7 @@ class SolarPV(fs.Node):
                 self.static_variables =  {PV_cap}
 
                 self.PV_cap = PV_cap
-                self.investment_cost = PV_cap * investment_cost
+                self.investment_cost = PV_cap * annual_cost
                 self.constraints += self.max_production
             else:
                 with fs.namespace(self): 
