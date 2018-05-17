@@ -14,7 +14,7 @@ class DispatchModel(fs.Part):
         super().__init__(name=name)
         self.time_end = t_end
         self.step = time_unit
-        self.time_start = t_start
+        self.time = t_start
         self.require_cost = require_cost
     
     def state_variables(self, t):
@@ -25,7 +25,7 @@ class DispatchModel(fs.Part):
 
     def solve(self):
         
-        opt_times = self.times_between(self.time_start, self.time_end)
+        opt_times = self.times_between(self.time, self.time_end)
 
         parts = self.descendants
 
@@ -45,8 +45,7 @@ class DispatchModel(fs.Part):
         
         solver = fs.get_solver()
         solution = solver.solve(problem)
-        
-        for p, t in product(parts, self.iter_times_between(self.time_start, self.time_end)):
+        for p, t in product(parts, self.iter_times_between(self.time, self.time_end)):
             for v in p.state_variables(t):
                 v.take_value(solution)
 
