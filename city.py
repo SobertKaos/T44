@@ -185,12 +185,30 @@ class CityModel():
         # larger max output per time step.
          
         hour = pd.Timedelta('1h') / parameters['time_unit']
+<<<<<<< HEAD
         #series_reader = lambda series: series.loc.__getitem__
         city = fs.Node(name='City')
         #import math
         #city.consumption[pl.Resources.heat] = lambda t: 30 + 5*math.sin(t.value)
         city.consumption[pl.Resources.heat] = lambda t: heat_history['Other'][t] #lambda t: 30 + 5*math.sin(t.value)
         city.consumption[pl.Resources.power]= lambda t: power_demand['Power demand'][t] #lambda t: 13 
+=======
+        series_reader = lambda series: series.loc.__getitem__
+
+        """ """
+        heat_history = self.get_heat_history(parameters['time_unit'])
+        
+        #test = series_reader(heat_history.sum(axis=1))
+
+        """ """
+
+        city = fs.Node(name='City')
+
+        import math
+        city.consumption[pl.Resources.heat] = lambda t: 30 + 5*math.sin(t.value)
+        #series_reader(heat_history)
+        city.consumption[pl.Resources.power]= lambda t: 13
+>>>>>>> f5ed0d15b25e8da359b5f478b9c2b5df9cb5fad7
         city.cost = lambda t: 0
         city.state_variables = lambda t: ()
         parts.add(city)
@@ -423,4 +441,4 @@ if __name__ == "__main__":
 
             from process_results import process_results
             process_results(model, parameters, pl.Resources, year, scenario)
-    
+   

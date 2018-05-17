@@ -4,7 +4,9 @@ import friendlysam as fs
 import partlib as pl
 import pdb
 
+
 def process_results(model, parameters, Resources, year, scenario):
+
 
     m = model.m
     parts=m.descendants
@@ -44,6 +46,7 @@ def get_input_data(parts):
     """Gather the input data for the existing parts in the model and returns it as a dictionary"""
     input_data={}
 
+
     for part in parts:
 
         if 'Existing' in part.name:
@@ -62,6 +65,7 @@ def consumption_results(m, parameters, parts, Resources):
     def _is_consumer(part,resource):
         if not isinstance(part, fs.FlowNetwork) and not isinstance(part, fs.Cluster):
             return resource in part.consumption
+
 
     consumer_names = [p for p in m.descendants if _is_consumer(p,Resources.heat)]
     consumers = {p.name: 
@@ -204,6 +208,7 @@ def DisplayResult(self):
     heat_producers = [p for p in self.m.descendants
                         if is_producer(p, pl.Resources.heat) and
                         not isinstance(p, fs.Cluster)]
+
     
     times = self.m.times_between(t_start, t_end)
     
@@ -216,6 +221,7 @@ def DisplayResult(self):
     heat=heat[order]
     heat *= pd.Timedelta('1h') / heat.index.freq
     print(heat)
+
 
     storage_times = self.m.times_between(t_start, t_end)
     storage = [p for p in self.m.descendants if isinstance(p, pl.Accumulator)]
@@ -231,6 +237,20 @@ def DisplayResult(self):
     #wasteMode = [p for p in self.m.descendants if isinstance(p, pl.LinearSlowCHP)]
     #wasteMode = {p.name: fs.get_series(p.modes['on'], storage_times) for p in wasteMode}
     return heat
+
+def display_results(data, save_figures = False):
+    
+
+    if 'heat_producers' in data.keys():
+        p = data['heat_producers'].plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+        p.get_legend().set_bbox_to_anchor((0.5, 1))
+    
+    if 'heat_accumulators' in data.keys():
+        s = data['heat_accumulators'].plot(kind='area', legend='reverse', lw=0, figsize=(8,8))
+        s.get_legend()
+
+    plt.show()
+    return None
 
 if __name__ == '__main__':
     pass
