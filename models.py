@@ -42,7 +42,7 @@ class DispatchModel(fs.Part):
         problem = fs.Problem()
         problem.objective = fs.Minimize(system_cost)
         problem += (p.constraints.make(t) for p, t in product(parts, opt_times))
-        
+
         solver = fs.get_solver()
         solution = solver.solve(problem)
         for p, t in product(parts, self.iter_times_between(self.time, self.time_end)):

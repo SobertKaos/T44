@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import friendlysam as fs
+import partlib as pl
 import pdb
 
 def process_results(model, parameters, Resources, year, scenario):
@@ -10,12 +11,16 @@ def process_results(model, parameters, Resources, year, scenario):
 
     input_data = get_input_data(parts)
     investment_data=get_investment_data(parts, scenario)
-    production = production_results(m, parameters, parts, Resources)
+    production, stored_energy = production_results(m, parameters, parts, Resources)
     consumption = consumption_results(m, parameters, parts, Resources)
-    [total_results, static_variables] = get_total_results(m, parameters, parts, Resources, scenario)
+    [total_results, static_variables, CO2_emissions] = get_total_results(m, parameters, parts, Resources, scenario)
+
+    waste_consumers=waste_consumption(m, parameters, parts, Resources)
+    waste_modes=waste_incinerator_modes(m, parameters, parts, Resources)
 
     total= {'input for existing units':input_data, 'input investment_data':investment_data, 'production':production, 
-    'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results}
+    'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 
+    'stored_energy':stored_energy, 'waste consumers': waste_consumers, 'waste incinerator modes': waste_modes, 'CO2_emissions': CO2_emissions}
     save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
 
 def get_investment_data(parts, scenario):
@@ -82,6 +87,13 @@ def production_results(m, parameters, parts, Resources):
         for p in heat_producers}
 
     heat = pd.DataFrame.from_dict(heat)
+
+    storage_times = m.times_between(parameters['t_start'], parameters['t_end'])
+    import partlib as pl
+    storage = [p for p in m.descendants if isinstance(p, pl.Accumulator)]
+    stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
+    stored_energy = pd.DataFrame.from_dict(stored_energy)
+
     """
     power_producers = [p for p in m.descendants
         if is_producer(p, Resources.power)] 
@@ -93,7 +105,7 @@ def production_results(m, parameters, parts, Resources):
     power = pd.DataFrame.from_dict(power) 
 
     """
-    return heat
+    return heat, stored_energy
     
 def get_total_results(m, parameters, parts, Resources, scenario):
     """Gather the investment cost for the system, including which investment options to invest in"""
@@ -135,15 +147,44 @@ def get_total_results(m, parameters, parts, Resources, scenario):
                 times=m.times_between(parameters['t_start'],parameters['t_end'])
                 CO2_emissions = {part.name:
                     fs.get_series(part.consumption[Resources.CO2], times)}
-
+                
                 total_emissions=0
                 for CO2 in CO2_emissions.values():
                     for row_index, row in CO2.iteritems():
                         total_emissions += row
-
+                CO2_emissions=pd.DataFrame.from_dict(CO2_emissions)
+    
     total_results={'investment cost [MEUR]':investment_cost_tot, 'running cost [EUR]': cost_tot, 
                     'total emissions [kg]':total_emissions}
-    return total_results, static_variables
+    return total_results, static_variables, CO2_emissions
+
+def waste_consumption(m, parameters, parts, Resources):
+    times = m.times_between(parameters['t_start'],parameters['t_end'])
+
+    def _is_consumer(part,resource):
+        if not isinstance(part, fs.FlowNetwork):
+            return resource in part.consumption
+
+    consumer_names = [p for p in m.descendants if _is_consumer(p,Resources.waste)]
+    waste_consumers = {p.name: 
+                fs.get_series(p.consumption[Resources.waste], times) 
+                for p in consumer_names}
+    waste_consumers = pd.DataFrame.from_dict(waste_consumers)
+
+    return waste_consumers
+
+def waste_incinerator_modes(m, parameters, parts, Resources):
+    
+    for part in parts:
+        if isinstance(part, pl.LinearSlowCHP):
+            times = m.times_between(parameters['t_start'],parameters['t_end'])
+            modes = {mode: 
+                    fs.get_series(part.modes[mode], times)
+                    for mode in ['on', 'off', 'starting']}
+    modes = pd.DataFrame.from_dict(modes)
+    
+    return modes
+
 
 def save_results_excel(m, parameters, year, scenario, results, output_data_path):
     """Write the results to on excelfile for each year and scenario"""
@@ -162,7 +203,7 @@ def save_results_excel(m, parameters, year, scenario, results, output_data_path)
             else:
                 output=pd.DataFrame(data)
                 output.to_excel(writer, sheet_name='%s'%key)
-        
+        writer.save()
     except: 
         time=str(datetime.datetime.now().time())
         time=time.replace(":", ".")
@@ -171,7 +212,7 @@ def save_results_excel(m, parameters, year, scenario, results, output_data_path)
             key=item[0]
             data=item[1]
             if type(data) == dict:
-                output=pd.DataFrame.from_dict([data])
+                output=pd.Series(data)
                 output.to_excel(writer, sheet_name='%s'%key)
             else:
                 output=pd.DataFrame(data)
