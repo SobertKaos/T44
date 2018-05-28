@@ -28,7 +28,7 @@ class CityModel():
         self._DEFAULT_PARAMETERS = {
             'time_unit': pd.Timedelta('1h'),  # Time unit
             't_start': pd.Timestamp('2017-01-01'),
-            't_end': pd.Timestamp('2017-01-30'), 
+            't_end': pd.Timestamp('2017-01-10'), 
             'prices': { # €/MWh (LHV)
                 pl.Resources.natural_gas: 7777,
                 pl.Resources.power: 7777,
@@ -37,7 +37,7 @@ class CityModel():
                 pl.Resources.biomass: 7777,
                 pl.Resources.CO2: 0
                 },
-            'CO2_factor': { # kg/TJ * TJ/MWh --> kg/MWh (only count fossil CO2) Hur ska jag göra med conversion factor
+            'CO2_factor': { # kg/TJ * TJ/MWh --> kg/MWh (only count fossil CO2)
                 pl.Resources.natural_gas: 0,
                 pl.Resources.power: 0,
                 pl.Resources.heat: 0,
@@ -84,7 +84,7 @@ class CityModel():
     
     def get_solar_data(self, time_unit):
         solar_data = pd.read_csv(
-            'C:/Users/lovisaax/Desktop/solar_data.csv',
+            'C:/Users/lovisaax/Desktop/solar_data_2017.csv',
                 encoding='utf-8',
                 index_col='Time',
                 parse_dates=True,
@@ -104,20 +104,24 @@ class CityModel():
         parameters = deepcopy(self._DEFAULT_PARAMETERS)
         parameters.update(kwargs)
         for resource in pl.Resources:
-            #conversion_factor=0.003600 #To convert CO2 factor from kg/TJ to kg/MWh
+            conversion_factor=0.003600 #To convert CO2 factor from kg/TJ to kg/MWh
             parameters['prices'][resource] = input_parameters['prices'][resource.name]
-            parameters['CO2_factor'][resource] = input_parameters['CO2_factor'][resource.name]#*conversion_factor
+            parameters['CO2_factor'][resource] = input_parameters['CO2_factor'][resource.name]*conversion_factor
         return parameters
 
     def make_model(self, parameters, input_data, year=None, scenario=None, seed=None):
         if seed:
             raise NotImplementedError('Randomizer not yet supported')
         print("building model")
+
+        parts, CO2_maximum = self.make_parts(parameters)
+
         model = DispatchModel(t_start=parameters['t_start'],
                               t_end=parameters['t_end'],
-                              time_unit=parameters['time_unit'])
+                              time_unit=parameters['time_unit'],
+                              CO2_maximum = CO2_maximum)
 
-        parts = self.make_parts(parameters)
+
         # No explicit distribution channels except for heat.
         for r in pl.Resources:
             if r is not pl.Resources.heat:
@@ -189,17 +193,6 @@ class CityModel():
                              name='power export')
         parts.add(powerExport)
         
-        """
-        def maximum_CO2(CO2_cap):       
-            def CO2_constraint(t):
-                t_start = parameters['t_start']
-                t_end = parameters['t_end']
-                times = CO2.times_between(t_start, t_end)
-                emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
-                return fs.LessEqual(emissions, CO2_cap)
-            return CO2_constraint
-        """
-
         CO2 = fs.Node(name = 'CO2_emissions')
         capacity=50000/hour
         quantity = fs.VariableCollection(lb=0, ub=capacity)
@@ -207,10 +200,16 @@ class CityModel():
         CO2.consumption[pl.Resources.CO2] = lambda t: quantity(t)
         CO2.cost = lambda t: 0
         CO2.state_variables = lambda t: {quantity(t)}
-        #CO2.constraints += maximum_CO2(1000000000000)
 
-        parts.add(CO2)
+        t_start= parameters['t_start']
+        t_end = parameters['t_end']
+        CO2.time_unit = pd.Timedelta('1h')
+        times = CO2.times_between(t_start, t_end)
+        emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
+        CO2_maximum = fs.LessEqual(emissions, 10000000000)
         
+        parts.add(CO2)
+
         parts.add(
             pl.LinearSlowCHP(
                 name='Existing CHP A',
@@ -302,7 +301,7 @@ class CityModel():
                 t_end = parameters['t_end']))   
         
         """ Investment alternatives for the scenarios"""
-        """
+        
         solar_data=self.get_solar_data(parameters['time_unit'])
 
         parts.add(
@@ -310,7 +309,7 @@ class CityModel():
             name = input_data['CHP']['name'],
             eta = input_data['CHP']['eta'], #Titta så att den här är rätt, är eta = n_el + n__thermal??
             alpha = input_data['CHP']['alpha'], #Kontrollera denna, är alpha = n_el/n_thermal --> 0.5.
-            start_steps = int(np.round(0.5*1)),#bytte ut hour mot 1 här för att få det att fungera.
+            start_steps = int(np.round(0.5*hour)),#bytte ut hour mot 1 här för att få det att fungera.
             capacity = input_data['CHP']['capacity'],
             max_capacity = input_data['CHP']['max_capacity'],
             fuel = pl.Resources.natural_gas, #data['inv_2030']['CHP invest']['fuel']
@@ -326,7 +325,7 @@ class CityModel():
                 capacity = input_data['SolarPV']['capacity'], #Eller capacity borde väl inte anges för investment option
                 taxation = input_data['SolarPV']['taxation'], 
                 investment_cost = input_data['SolarPV']['investment_cost']))
-
+        
         parts.add(
             pl.Accumulator(
                 name = input_data['Accumulator']['name'],
@@ -335,8 +334,9 @@ class CityModel():
                 max_energy = input_data['Accumulator']['max_energy'], 
                 loss_factor = input_data['Accumulator']['loss_factor'],
                 max_capacity = input_data['Accumulator']['max_capacity'],
-                investment_cost = input_data['Accumulator']['investment_cost']))
-        """
+                investment_cost = input_data['Accumulator']['investment_cost'],
+                t_start = parameters['t_start'],
+                t_end = parameters['t_end']))  
 
         parts_in_heat_cluster = {p for p in parts
                           if ((pl.Resources.heat in p.production) or
@@ -351,7 +351,7 @@ class CityModel():
             city_heat_cluster.add_part(p)
         parts.add(city_heat_cluster)
 
-        return parts
+        return parts, CO2_maximum
         
 
 if __name__ == "__main__":
@@ -360,9 +360,9 @@ if __name__ == "__main__":
     from read_data import read_data
     data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    for year in ['2030']:#, '2050']:
+    for year in ['2050']:
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['BAU']:#,'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['Trade_off']: # 'BAU', Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()

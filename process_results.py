@@ -16,11 +16,10 @@ def process_results(model, parameters, Resources, year, scenario):
     [total_results, static_variables, CO2_emissions] = get_total_results(m, parameters, parts, Resources, scenario)
 
     waste_consumers=waste_consumption(m, parameters, parts, Resources)
-    waste_modes=waste_incinerator_modes(m, parameters, parts, Resources)
 
     total= {'input for existing units':input_data, 'input investment_data':investment_data, 'production':production, 
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 
-    'stored_energy':stored_energy, 'waste consumers': waste_consumers, 'waste incinerator modes': waste_modes, 'CO2_emissions': CO2_emissions}
+    'stored_energy':stored_energy, 'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions}
     save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
 
 def get_investment_data(parts, scenario):
@@ -139,7 +138,7 @@ def get_total_results(m, parameters, parts, Resources, scenario):
         if part.cost(t):
             cost[part.name]=part.cost(t).value
             cost_tot += part.cost(t).value
-
+    
     """The CO2 emissions from the system"""
     for part in parts:
         if (not isinstance(part, fs.FlowNetwork)) and (not isinstance(part, fs.Cluster)):

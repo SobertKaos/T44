@@ -88,7 +88,7 @@ class Accumulator(fs.Node):
         self.inv = inv
         
         
-        if max_capacity:
+        if self.max_capacity:
             self.investment_cost = self.inv * self.max_capacity * investment_cost
             self.constraints += self.max_volume
             self.static_variables = {inv}
@@ -100,9 +100,7 @@ class Accumulator(fs.Node):
         self.constraints += self.start_volume
 
     def start_volume(self, t):
-        """
-        Start constraint, restrict the accumulator from discharging energy at t_start. 
-        """
+        """ Start constraint, restrict the accumulator from discharging energy at t_start. """
         return fs.Eq(self.accumulation[self.resource](self.t_start), 0)
 
     def start_end_volume(self, t):
