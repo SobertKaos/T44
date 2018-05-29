@@ -10,13 +10,15 @@ from friendlysam.compat import ignored
 
 class DispatchModel(fs.Part):
     """docstring for MyopicDispatchModel"""
-    def __init__(self, t_start=None, t_end=None, time_unit=None, name=None, require_cost=True):
+    def __init__(self, t_start=None, t_end=None, time_unit=None, name=None, 
+                CO2_maximum = None, require_cost=True):
         super().__init__(name=name)
         self.time_end = t_end
         self.step = time_unit
-        self.time_start = t_start
+        self.time = t_start
         self.require_cost = require_cost
-    
+        self.CO2_maximum = CO2_maximum
+        
     def state_variables(self, t):
         return tuple()
 
@@ -25,7 +27,7 @@ class DispatchModel(fs.Part):
 
     def solve(self):
         
-        opt_times = self.times_between(self.time_start, self.time_end)
+        opt_times = self.times_between(self.time, self.time_end)
 
         parts = self.descendants
 
@@ -42,11 +44,12 @@ class DispatchModel(fs.Part):
         problem = fs.Problem()
         problem.objective = fs.Minimize(system_cost)
         problem += (p.constraints.make(t) for p, t in product(parts, opt_times))
-        
+
+        problem += self.CO2_maximum
+
         solver = fs.get_solver()
         solution = solver.solve(problem)
-        
-        for p, t in product(parts, self.iter_times_between(self.time_start, self.time_end)):
+        for p, t in product(parts, self.iter_times_between(self.time, self.time_end)):
             for v in p.state_variables(t):
                 v.take_value(solution)
 
