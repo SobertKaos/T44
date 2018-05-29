@@ -87,7 +87,6 @@ class Accumulator(fs.Node):
         self.max_capacity = max_capacity
         self.inv = inv
         
-        
         if self.max_capacity:
             self.investment_cost = self.inv * self.max_capacity * investment_cost
             self.constraints += self.max_volume

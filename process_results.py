@@ -11,15 +11,15 @@ def process_results(model, parameters, Resources, year, scenario):
 
     input_data = get_input_data(parts)
     investment_data=get_investment_data(parts, scenario)
-    production, stored_energy = production_results(m, parameters, parts, Resources)
-    consumption = consumption_results(m, parameters, parts, Resources)
+    production, stored_energy, power = production_results(m, parameters, parts, Resources)
+    consumption, power_consumers = consumption_results(m, parameters, parts, Resources)
     [total_results, static_variables, CO2_emissions] = get_total_results(m, parameters, parts, Resources, scenario)
 
     waste_consumers=waste_consumption(m, parameters, parts, Resources)
 
     total= {'input for existing units':input_data, 'input investment_data':investment_data, 'production':production, 
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 
-    'stored_energy':stored_energy, 'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions}
+    'stored_energy':stored_energy, 'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power':power, 'power_consumers': power_consumers}
     save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
 
 def get_investment_data(parts, scenario):
@@ -68,7 +68,14 @@ def consumption_results(m, parameters, parts, Resources):
                 fs.get_series(p.consumption[Resources.heat], times) 
                 for p in consumer_names}
     consumers = pd.DataFrame.from_dict(consumers)
-    return consumers
+
+    power_consumer_names = [p for p in m.descendants if _is_consumer(p,Resources.power)]
+    power_consumers = {p.name: 
+                fs.get_series(p.consumption[Resources.power], times) 
+                for p in power_consumer_names}
+    power_consumers = pd.DataFrame.from_dict(power_consumers)
+
+    return consumers, power_consumers
 
 def production_results(m, parameters, parts, Resources):
     """ Takes a model object, extracts and returns the production information."""
@@ -93,7 +100,7 @@ def production_results(m, parameters, parts, Resources):
     stored_energy = {p.name: fs.get_series(p.volume, storage_times) for p in storage}
     stored_energy = pd.DataFrame.from_dict(stored_energy)
 
-    """
+    
     power_producers = [p for p in m.descendants
         if is_producer(p, Resources.power)] 
 
@@ -103,8 +110,8 @@ def production_results(m, parameters, parts, Resources):
 
     power = pd.DataFrame.from_dict(power) 
 
-    """
-    return heat, stored_energy
+    
+    return heat, stored_energy, power
     
 def get_total_results(m, parameters, parts, Resources, scenario):
     """Gather the investment cost for the system, including which investment options to invest in"""

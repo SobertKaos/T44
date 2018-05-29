@@ -28,7 +28,7 @@ class CityModel():
         self._DEFAULT_PARAMETERS = {
             'time_unit': pd.Timedelta('1h'),  # Time unit
             't_start': pd.Timestamp('2017-01-01'),
-            't_end': pd.Timestamp('2017-12-30'), 
+            't_end': pd.Timestamp('2017-01-30'), 
             'prices': { # €/MWh (LHV)
                 pl.Resources.natural_gas: 7777,
                 pl.Resources.power: 7777,
@@ -100,6 +100,12 @@ class CityModel():
         power_price = self.read_csv(self.power_price_file, squeeze=True)
         return power_price.resample(time_unit).mean()
     """
+
+    def annuity(self, interest_rate, lifespan, investment_cost):
+        k = interest_rate/(1-(1+interest_rate)**(-lifespan))
+        r = investment_cost*k
+        return r
+
     def get_parameters(self, **kwargs):
         parameters = deepcopy(self._DEFAULT_PARAMETERS)
         parameters.update(kwargs)
@@ -114,12 +120,12 @@ class CityModel():
             raise NotImplementedError('Randomizer not yet supported')
         print("building model")
 
-        parts, CO2_maximum = self.make_parts(parameters)
+        parts, timeindependent_constraint = self.make_parts(parameters)
 
         model = DispatchModel(t_start=parameters['t_start'],
                               t_end=parameters['t_end'],
                               time_unit=parameters['time_unit'],
-                              CO2_maximum = CO2_maximum)
+                              timeindependent_constraint = timeindependent_constraint)
 
 
         # No explicit distribution channels except for heat.
@@ -191,6 +197,15 @@ class CityModel():
                              capacity=1000 / hour, # Arbitrarily chosen, assumed higher than combined production
                              price = parameters['prices'][pl.Resources.power]/10,
                              name='power export')
+        
+        "Timeindependent constraint on maximum power export during the whole timeperiod"
+        t_start= parameters['t_start']
+        t_end = parameters['t_end']
+        powerExport.time_unit = pd.Timedelta('1h')
+        times = powerExport.times_between(t_start, t_end)
+        power = fs.Sum(powerExport.consumption[pl.Resources.power](t) for t in times)
+        power_maximum = fs.LessEqual(power, 60000)
+
         parts.add(powerExport)
         
         CO2 = fs.Node(name = 'CO2_emissions')
@@ -201,12 +216,13 @@ class CityModel():
         CO2.cost = lambda t: 0
         CO2.state_variables = lambda t: {quantity(t)}
 
+        "Timeindependent constraint on maximum CO2 emissions during the whole timeperiod"
         t_start= parameters['t_start']
         t_end = parameters['t_end']
         CO2.time_unit = pd.Timedelta('1h')
         times = CO2.times_between(t_start, t_end)
         emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
-        CO2_maximum = fs.LessEqual(emissions, 10000000000)
+        CO2_maximum = fs.LessEqual(emissions, 25000000) #below 24 069 146 limit the CO2 emissions
         
         parts.add(CO2)
 
@@ -309,13 +325,13 @@ class CityModel():
             name = input_data['CHP']['name'],
             eta = input_data['CHP']['eta'], #Titta så att den här är rätt, är eta = n_el + n__thermal??
             alpha = input_data['CHP']['alpha'], #Kontrollera denna, är alpha = n_el/n_thermal --> 0.5.
-            start_steps = int(np.round(0.5*hour)),#bytte ut hour mot 1 här för att få det att fungera.
+            start_steps = int(np.round(input_data['CHP']['start_steps']*hour)),#Vad ska vi ha för start_steps?
             capacity = input_data['CHP']['capacity'],
             max_capacity = input_data['CHP']['max_capacity'],
-            fuel = pl.Resources.natural_gas, #data['inv_2030']['CHP invest']['fuel']
+            fuel =  input_data['CHP']['resource'],
             taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
-            investment_cost = input_data['CHP']['investment_cost']))
-        
+            investment_cost = self.annuity(0.01, input_data['CHP']['lifespan'], input_data['CHP']['investment_cost'])))
+
         parts.add(
             pl.SolarPV(
                 name = input_data['SolarPV']['name'],
@@ -324,17 +340,17 @@ class CityModel():
                 max_capacity = input_data['SolarPV']['max_capacity'],
                 capacity = input_data['SolarPV']['capacity'], #Eller capacity borde väl inte anges för investment option
                 taxation = input_data['SolarPV']['taxation'], 
-                investment_cost = input_data['SolarPV']['investment_cost']))
-        
+                investment_cost = self.annuity(0.01, input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost'])))
+
         parts.add(
             pl.Accumulator(
                 name = input_data['Accumulator']['name'],
-                resource = pl.Resources.heat, #data['Accumulator']['resource'],
-                max_flow = input_data['Accumulator']['max_flow'], #Bytte ut hour mot 1. Ska max_flow vara 6 för denna också?
+                resource =  input_data['Accumulator']['resource'], 
+                max_flow = input_data['Accumulator']['max_flow'], 
                 max_energy = input_data['Accumulator']['max_energy'], 
                 loss_factor = input_data['Accumulator']['loss_factor'],
                 max_capacity = input_data['Accumulator']['max_capacity'],
-                investment_cost = input_data['Accumulator']['investment_cost'],
+                investment_cost = self.annuity(0.01, input_data['Accumulator']['lifespan'], input_data['Accumulator']['investment_cost']),
                 t_start = parameters['t_start'],
                 t_end = parameters['t_end']))  
 
@@ -351,7 +367,11 @@ class CityModel():
             city_heat_cluster.add_part(p)
         parts.add(city_heat_cluster)
 
-        return parts, CO2_maximum
+        timeindependent_constraint = []
+        if 'Trade_off_CO2' in scenario:
+            timeindependent_constraint = [CO2_maximum]
+        
+        return parts, timeindependent_constraint
         
 
 if __name__ == "__main__":
@@ -360,9 +380,9 @@ if __name__ == "__main__":
     from read_data import read_data
     data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    for year in ['2030', '2050']:
+    for year in ['2050']:#, '2050']:
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['Trade_off']:#, 'BAU', Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()

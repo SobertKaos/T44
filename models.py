@@ -11,13 +11,13 @@ from friendlysam.compat import ignored
 class DispatchModel(fs.Part):
     """docstring for MyopicDispatchModel"""
     def __init__(self, t_start=None, t_end=None, time_unit=None, name=None, 
-                CO2_maximum = None, require_cost=True):
+                timeindependent_constraint = None, require_cost=True):
         super().__init__(name=name)
         self.time_end = t_end
         self.step = time_unit
         self.time = t_start
         self.require_cost = require_cost
-        self.CO2_maximum = CO2_maximum
+        self.timeindependent_constraint = timeindependent_constraint
         
     def state_variables(self, t):
         return tuple()
@@ -45,7 +45,7 @@ class DispatchModel(fs.Part):
         problem.objective = fs.Minimize(system_cost)
         problem += (p.constraints.make(t) for p, t in product(parts, opt_times))
 
-        problem += self.CO2_maximum
+        problem += self.timeindependent_constraint
 
         solver = fs.get_solver()
         solution = solver.solve(problem)
