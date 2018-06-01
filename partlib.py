@@ -50,7 +50,6 @@ class Boiler(fs.Node):
             self.investment_cost = cap * investment_cost
             self.static_variables = {cap}
         else: 
-            #self.investment_cost =  investment_cost
             self.static_variables = {}
         
     def max_production(self, t):
@@ -92,7 +91,6 @@ class Accumulator(fs.Node):
             self.constraints += self.max_volume
             self.static_variables = {inv}
         else:
-            #self.investment_cost = investment_cost
             self.static_variables = {}
         
         self.constraints += self.start_end_volume
@@ -206,10 +204,8 @@ class LinearSlowCHP(fs.Node):
         elif capacity:
             Fmin=0.2*capacity*(1 + alpha) / eta
             Fmax=capacity*(1 + alpha) / eta
-            #self.investment_cost = investment_cost
             self.static_variables =  {}
         else:
-            #self.investment_cost = investment_cost
             self.static_variables =  {}
 
         self.consumption[fuel] = lambda t: F_on(t) + modes['starting'](t) * Fmin

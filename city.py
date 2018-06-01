@@ -28,7 +28,7 @@ class CityModel():
         self._DEFAULT_PARAMETERS = {
             'time_unit': pd.Timedelta('1h'),  # Time unit
             't_start': pd.Timestamp('2017-01-01'),
-            't_end': pd.Timestamp('2017-01-30'), 
+            't_end': pd.Timestamp('2017-12-30'), 
             'prices': { # €/MWh (LHV)
                 pl.Resources.natural_gas: 7777,
                 pl.Resources.power: 7777,
@@ -44,7 +44,8 @@ class CityModel():
                 pl.Resources.waste: 0,
                 pl.Resources.biomass: 0,
                 pl.Resources.CO2: 0
-                }
+                },
+            'interest_rate': 0.01
             }
         
     def RunModel(self):
@@ -101,6 +102,12 @@ class CityModel():
         return power_price.resample(time_unit).mean()
     """
 
+    """
+    def get_renovation_data(self, time_unit)
+        renovation_data = self.read_csv()
+        return renovation_data.resample(time_unit).sum())
+    """
+
     def annuity(self, interest_rate, lifespan, investment_cost):
         k = interest_rate/(1-(1+interest_rate)**(-lifespan))
         r = investment_cost*k
@@ -109,12 +116,12 @@ class CityModel():
     def get_parameters(self, **kwargs):
         parameters = deepcopy(self._DEFAULT_PARAMETERS)
         parameters.update(kwargs)
+        parameters['interest_rate'] = input_parameters['interest_rate']['interest_rate']
         for resource in pl.Resources:
             conversion_factor=0.003600 #To convert CO2 factor from kg/TJ to kg/MWh
             parameters['prices'][resource] = input_parameters['prices'][resource.name]
             parameters['CO2_factor'][resource] = input_parameters['CO2_factor'][resource.name]*conversion_factor
         return parameters
-
     def make_model(self, parameters, input_data, year=None, scenario=None, seed=None):
         if seed:
             raise NotImplementedError('Randomizer not yet supported')
@@ -180,8 +187,36 @@ class CityModel():
         # larger max output per time step.
         
         hour = pd.Timedelta('1h') / parameters['time_unit']
+        
+        renovation_data_1 = self.get_heat_history(parameters['time_unit'])*0.01 #change to renovation data when available
+        renovation_data_15 =self.get_heat_history(parameters['time_unit'])*0.015 #change to renovation data when available
+
+        renovation = fs.Node(name = input_data['Renovation']['name'])
+        renovation_level = input_data['Renovation']['capacity']
+        inv_0 = fs.Variable(domain=fs.Domain.binary)
+        inv_1 = fs.Variable(domain=fs.Domain.binary)
+        inv_15 = fs.Variable(domain=fs.Domain.binary)
+
+        renovation.test = {'investment_cost' : input_data['Renovation']['investment_cost'], 'renovation level': renovation_level}
+        renovation.state_variables = lambda t: {}
+        renovation.static_variables ={}
+
+        if 'Trade_off' in scenario:
+            renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]*inv_1 - renovation_data_15['Other'][t]*inv_15 -0*inv_0
+            renovation.static_variables = {inv_1, inv_15}
+        elif renovation_level == 0.01: 
+            renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]
+        else:
+            renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]
+        
+        renovation.cost = lambda t: 0
+        investment_cost = [5, 10000]
+        renovation.investment_cost = investment_cost * inv_0 + investment_cost[0] * inv_1 + investment_cost[1]*inv_15
+        renovation_const = fs.Eq(inv_0 + inv_1 + inv_15, 1)
+        parts.add(renovation)
+        
         city = fs.Node(name='City')
-        city.consumption[pl.Resources.heat] =  lambda t: heat_history['Other'][t] 
+        city.consumption[pl.Resources.heat] =  lambda t: heat_history['Other'][t]*2 
         city.consumption[pl.Resources.power] = lambda t: power_demand['Power demand'][t] 
         city.cost = lambda t: 0
         city.state_variables = lambda t: ()
@@ -211,7 +246,6 @@ class CityModel():
         CO2 = fs.Node(name = 'CO2_emissions')
         capacity=50000/hour
         quantity = fs.VariableCollection(lb=0, ub=capacity)
-
         CO2.consumption[pl.Resources.CO2] = lambda t: quantity(t)
         CO2.cost = lambda t: 0
         CO2.state_variables = lambda t: {quantity(t)}
@@ -222,7 +256,7 @@ class CityModel():
         CO2.time_unit = pd.Timedelta('1h')
         times = CO2.times_between(t_start, t_end)
         emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
-        CO2_maximum = fs.LessEqual(emissions, 25000000) #below 24 069 146 limit the CO2 emissions
+        CO2_maximum = fs.LessEqual(emissions, 100000000) #below 24 069 146 limit the CO2 emissions
         
         parts.add(CO2)
 
@@ -303,7 +337,7 @@ class CityModel():
                 alpha=0.46,
                 eta=0.81,
                 Fmin= 2.5/hour,
-                Fmax= 45/hour, #45 /hour, # Update to reflect 25 MW output max according to D4.2 p 32 
+                Fmax= 45/hour, # Update to reflect 25 MW output max according to D4.2 p 32 
                 taxation=taxation))  
 
         parts.add(
@@ -312,7 +346,7 @@ class CityModel():
                 resource=pl.Resources.heat,
                 max_flow=60/hour, 
                 max_energy= 220,
-                loss_factor = 0.01,
+                loss_factor = 0.005,
                 t_start = parameters['t_start'],
                 t_end = parameters['t_end']))   
         
@@ -330,7 +364,22 @@ class CityModel():
             max_capacity = input_data['CHP']['max_capacity'],
             fuel =  input_data['CHP']['resource'],
             taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
-            investment_cost = self.annuity(0.01, input_data['CHP']['lifespan'], input_data['CHP']['investment_cost'])))
+            investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost'])))
+
+        if '2050' in year:
+            if 'Trade_off' in scenario:
+                parts.add(
+                    pl.LinearSlowCHP(
+                    name = input_data['CHP invest']['name'],
+                    eta = input_data['CHP invest']['eta'], #Titta så att den här är rätt, är eta = n_el + n__thermal??
+                    alpha = input_data['CHP invest']['alpha'], #Kontrollera denna, är alpha = n_el/n_thermal --> 0.5.
+                    start_steps = int(np.round(input_data['CHP invest']['start_steps']*hour)),#Vad ska vi ha för start_steps?
+                    capacity = input_data['CHP invest']['capacity'],
+                    max_capacity = input_data['CHP invest']['max_capacity'],
+                    fuel =  input_data['CHP invest']['resource'],
+                    taxation = input_data['CHP invest']['taxation'],  #ska vara taxation här men fick inte rätt då
+                    investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP invest']['lifespan'], input_data['CHP invest']['investment_cost'])))
+
 
         parts.add(
             pl.SolarPV(
@@ -340,7 +389,7 @@ class CityModel():
                 max_capacity = input_data['SolarPV']['max_capacity'],
                 capacity = input_data['SolarPV']['capacity'], #Eller capacity borde väl inte anges för investment option
                 taxation = input_data['SolarPV']['taxation'], 
-                investment_cost = self.annuity(0.01, input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost'])))
+                investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost'])))
 
         parts.add(
             pl.Accumulator(
@@ -350,7 +399,7 @@ class CityModel():
                 max_energy = input_data['Accumulator']['max_energy'], 
                 loss_factor = input_data['Accumulator']['loss_factor'],
                 max_capacity = input_data['Accumulator']['max_capacity'],
-                investment_cost = self.annuity(0.01, input_data['Accumulator']['lifespan'], input_data['Accumulator']['investment_cost']),
+                investment_cost = self.annuity(parameters['interest_rate'], input_data['Accumulator']['lifespan'], input_data['Accumulator']['investment_cost']),
                 t_start = parameters['t_start'],
                 t_end = parameters['t_end']))  
 
@@ -368,8 +417,8 @@ class CityModel():
         parts.add(city_heat_cluster)
 
         timeindependent_constraint = []
-        if 'Trade_off_CO2' in scenario:
-            timeindependent_constraint = [CO2_maximum]
+        if 'Trade_off' in scenario:
+            timeindependent_constraint = [CO2_maximum, renovation_const]
         
         return parts, timeindependent_constraint
         
@@ -380,7 +429,7 @@ if __name__ == "__main__":
     from read_data import read_data
     data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    for year in ['2050']:#, '2050']:
+    for year in ['2030']:#, '2050']:
         input_parameters=data[year+'_input_parameters']
         for scenario in ['Trade_off']:#, 'BAU', Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
