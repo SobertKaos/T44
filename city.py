@@ -162,8 +162,8 @@ class CityModel():
 
         heat_history = self.get_heat_history(parameters['time_unit'])
         power_demand = self.get_power_demand(parameters['time_unit'])
-        heat_history_industry = self.get_heat_history_industry(parameters['time_unit'])
-        
+        heat_history_industry = self.get_heat_history(parameters['time_unit'])*(2/3) #self.get_heat_history_industry(parameters['time_unit'])
+
         heat_history = round(heat_history)
         power_demand = round(power_demand)
         heat_history_industry = round(heat_history_industry)
@@ -203,27 +203,27 @@ class CityModel():
 
         if 'Trade_off' in scenario:
             renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]*inv_1 - renovation_data_15['Other'][t]*inv_15 -0*inv_0
-            renovation.static_variables = {inv_1, inv_15}
+            renovation.static_variables = {inv_0, inv_1, inv_15}
+            renovation.investment_cost = 0 * inv_0 + self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']) * inv_1
+            + self.annuity(parameters['interest_rate'],input_data['Renovation_15']['lifespan'],input_data['Renovation_15']['investment_cost']) * inv_15
         elif renovation_level == 0.01: 
             renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]
         else:
             renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]
         
         renovation.cost = lambda t: 0
-        investment_cost = [5, 10000]
-        renovation.investment_cost = investment_cost * inv_0 + investment_cost[0] * inv_1 + investment_cost[1]*inv_15
         renovation_const = fs.Eq(inv_0 + inv_1 + inv_15, 1)
         parts.add(renovation)
         
         city = fs.Node(name='City')
-        city.consumption[pl.Resources.heat] =  lambda t: heat_history['Other'][t]*2 
+        city.consumption[pl.Resources.heat] =  lambda t: heat_history['Other'][t]*2
         city.consumption[pl.Resources.power] = lambda t: power_demand['Power demand'][t] 
         city.cost = lambda t: 0
         city.state_variables = lambda t: ()
         parts.add(city)
 
         Industry = fs.Node(name='Industry')
-        Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['Industrial'][t] 
+        Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['Other'][t] #heat_history_industry['Industrial'][t] 
         Industry.cost = lambda t: 0
         Industry.state_variables = lambda t: ()
         parts.add(Industry)
@@ -251,17 +251,14 @@ class CityModel():
         CO2.state_variables = lambda t: {quantity(t)}
 
         "Timeindependent constraint on maximum CO2 emissions during the whole timeperiod"
-        t_start= parameters['t_start']
-        t_end = parameters['t_end']
         CO2.time_unit = pd.Timedelta('1h')
-        times = CO2.times_between(t_start, t_end)
+        times = CO2.times_between(parameters['t_start'], parameters['t_end'])
         emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
         CO2_maximum = fs.LessEqual(emissions, 100000000) #below 24 069 146 limit the CO2 emissions
         
         parts.add(CO2)
 
-        parts.add(
-            pl.LinearSlowCHP(
+        CHP_A = pl.LinearSlowCHP(
                 name='Existing CHP A',
                 eta=0.776, # was 77.6
                 alpha=0.98,
@@ -269,10 +266,13 @@ class CityModel():
                 Fmin= 2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
                 #start_steps=int(np.round(.5 * hour)),
                 fuel=pl.Resources.natural_gas,
-                taxation=taxation))
+                taxation=taxation)
+        CHP_A.time_unit = pd.Timedelta('1h')
+        times = CHP_A.times_between(parameters['t_start'],parameters['t_end'])
+        production_CHP_A=fs.Sum(CHP_A.production[pl.Resources.heat](t) for t in times)
+        parts.add(CHP_A)        
 
-        parts.add(
-            pl.LinearSlowCHP(
+        CHP_B =pl.LinearSlowCHP(
                 name='Existing CHP B',
                 eta=0.778, #was 77.8
                 alpha=0.98,
@@ -280,7 +280,14 @@ class CityModel():
                 Fmin=2.33 / hour,  # 245.0 / hour,  # 245 m3/hour
                 start_steps=int(np.round(.5 * hour)),
                 fuel=pl.Resources.natural_gas,
-                taxation=taxation))
+                taxation=taxation)
+        CHP_B.time_unit = pd.Timedelta('1h')
+        times = CHP_B.times_between(parameters['t_start'],parameters['t_end'])
+        production_CHP_B=fs.Sum(CHP_B.production[pl.Resources.heat](t) for t in times)
+        parts.add(CHP_B) 
+
+        limit = sum(heat_history['Other'])*0.005 #Should be 10% of energy production instead, this is test limit
+        min_prod = fs.LessEqual(limit, production_CHP_A + production_CHP_B)
 
         parts.add(
             pl.Boiler(
@@ -418,7 +425,7 @@ class CityModel():
 
         timeindependent_constraint = []
         if 'Trade_off' in scenario:
-            timeindependent_constraint = [CO2_maximum, renovation_const]
+            timeindependent_constraint = [CO2_maximum, renovation_const, min_prod]
         
         return parts, timeindependent_constraint
         
