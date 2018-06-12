@@ -28,7 +28,6 @@ def get_investment_data(parts, scenario):
     
     if 'Trade_off' in scenario:
         for part in parts:
-
             if 'invest' in part.name:
                 temp={}
                 for item in part.test.items():
@@ -133,7 +132,12 @@ def get_total_results(m, parameters, parts, Resources, scenario):
                         v.value = 'yes invest max capacity'
                     else:
                         v.value = ('yes invest %s MW' %v.value)
-                    static_variables[part.name]=v.value
+                    if 'Renovation' in part.name:
+                        if investment_cost[part.name] != 0:
+                            v.value = 'invest max capacity'
+                        else:
+                            v.value = 'no investment'
+                    static_variables[part.name]=v.value           
     else:
         static_variables[scenario] = ['No investment alternatives in this scenario']
 
@@ -160,8 +164,8 @@ def get_total_results(m, parameters, parts, Resources, scenario):
                         total_emissions += row
                 CO2_emissions=pd.DataFrame.from_dict(CO2_emissions)
     
-    total_results={'investment cost [MEUR]':investment_cost_tot, 'running cost [EUR]': cost_tot, 
-                    'total emissions [kg]':total_emissions}
+    total_results={'investment cost [MEUR/year]':investment_cost_tot, 'running cost [EUR/year]': cost_tot, 
+                    'total emissions [kg/year]':total_emissions}
     return total_results, static_variables, CO2_emissions
 
 def waste_consumption(m, parameters, parts, Resources):
