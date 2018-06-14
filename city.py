@@ -455,12 +455,12 @@ if __name__ == "__main__":
 
     for year in ['2030']:#, '2050']:
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['Trade_off']:# 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['Trade_off']: #'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()
             parameters = model.get_parameters()
 
             from process_results import process_results
-            process_results(model, parameters, pl.Resources, year, scenario)
+            process_results(model, parameters, pl.Resources, year, scenario, input_data)
     

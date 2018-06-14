@@ -4,12 +4,12 @@ import friendlysam as fs
 import partlib as pl
 import pdb
 
-def process_results(model, parameters, Resources, year, scenario):
+def process_results(model, parameters, Resources, year, scenario, data):
 
     m = model.m
     parts=m.descendants
 
-    input_data = get_input_data(parts)
+    input_data = get_input_data(parts, data)
     investment_data=get_investment_data(parts, scenario)
     production, stored_energy, power = production_results(m, parameters, parts, Resources)
     consumption, power_consumers = consumption_results(m, parameters, parts, Resources)
@@ -17,9 +17,9 @@ def process_results(model, parameters, Resources, year, scenario):
 
     waste_consumers=waste_consumption(m, parameters, parts, Resources)
 
-    total= {'input for existing units':input_data, 'input investment_data':investment_data, 'production':production, 
-    'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 
-    'stored_energy':stored_energy, 'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power':power, 'power_consumers': power_consumers}
+    total= {'input for scenario':input_data, 'input investment_data':investment_data, 'production':production, 
+    'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 'stored_energy':stored_energy,
+    'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power':power, 'power_consumers': power_consumers}
     save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
 
 def get_investment_data(parts, scenario):
@@ -36,22 +36,25 @@ def get_investment_data(parts, scenario):
                 investment_data[part.name]=temp
     else:
         investment_data[scenario] = ['No investment alternatives in this scenario']
-    
+
     return investment_data
 
-def get_input_data(parts):
+def get_input_data(parts, data):
     """Gather the input data for the existing parts in the model and returns it as a dictionary"""
     input_data={}
-
     for part in parts:
-
+        import pdb
+        pdb.set_trace()
         if 'Existing' in part.name:
             temp={}
             for item in part.test.items():
                 key=item[0]
                 temp[key]=item[1]
             input_data[part.name]=temp
-    
+        
+        elif part.name in data.keys():
+            input_data[part.name] = data[part.name]
+
     return input_data
 
 def consumption_results(m, parameters, parts, Resources):
@@ -194,7 +197,6 @@ def waste_incinerator_modes(m, parameters, parts, Resources):
     modes = pd.DataFrame.from_dict(modes)
     
     return modes
-
 
 def save_results_excel(m, parameters, year, scenario, results, output_data_path):
     """Write the results to on excelfile for each year and scenario"""
