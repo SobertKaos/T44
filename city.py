@@ -236,7 +236,7 @@ class CityModel():
         parts.add(city)
 
         Industry = fs.Node(name='Industry')
-        Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['Other'][t] #heat_history_industry['Industrial'][t] 
+        Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['Other'][t]*2 #heat_history_industry['Industrial'][t] 
         Industry.cost = lambda t: 0
         Industry.state_variables = lambda t: ()
         parts.add(Industry)
@@ -370,7 +370,7 @@ class CityModel():
                 t_start = parameters['t_start'],
                 t_end = parameters['t_end']))   
         
-        """ Investment alternatives for the scenarios"""
+        """ Production alternatives for the scenarios"""
         
         solar_data=self.get_solar_data(parameters['time_unit'])
 
@@ -410,18 +410,18 @@ class CityModel():
                 capacity = input_data['SolarPV']['capacity'], #Eller capacity borde väl inte anges för investment option
                 taxation = input_data['SolarPV']['taxation'], 
                 investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost'])))
-
-        parts.add(
-            pl.Accumulator(
-                name = input_data['Accumulator']['name'],
-                resource =  input_data['Accumulator']['resource'], 
-                max_flow = input_data['Accumulator']['max_flow'], 
-                max_energy = input_data['Accumulator']['max_energy'], 
-                loss_factor = input_data['Accumulator']['loss_factor'],
-                max_capacity = input_data['Accumulator']['max_capacity'],
-                investment_cost = self.annuity(parameters['interest_rate'], input_data['Accumulator']['lifespan'], input_data['Accumulator']['investment_cost']),
-                t_start = parameters['t_start'],
-                t_end = parameters['t_end']))  
+        if '2050' in year:
+            parts.add(
+                pl.Accumulator(
+                    name = input_data['Accumulator']['name'],
+                    resource =  input_data['Accumulator']['resource'], 
+                    max_flow = input_data['Accumulator']['max_flow'], 
+                    max_energy = input_data['Accumulator']['max_energy'], 
+                    loss_factor = input_data['Accumulator']['loss_factor'],
+                    max_capacity = input_data['Accumulator']['max_capacity'],
+                    investment_cost = self.annuity(parameters['interest_rate'], input_data['Accumulator']['lifespan'], input_data['Accumulator']['investment_cost']),
+                    t_start = parameters['t_start'],
+                    t_end = parameters['t_end']))  
 
         parts_in_heat_cluster = {p for p in parts
                           if ((pl.Resources.heat in p.production) or
@@ -455,7 +455,7 @@ if __name__ == "__main__":
 
     for year in ['2030']:#, '2050']:
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['Trade_off']: #'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['BAU', 'Trade_off']: #'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()

@@ -43,8 +43,6 @@ def get_input_data(parts, data):
     """Gather the input data for the existing parts in the model and returns it as a dictionary"""
     input_data={}
     for part in parts:
-        import pdb
-        pdb.set_trace()
         if 'Existing' in part.name:
             temp={}
             for item in part.test.items():
@@ -121,29 +119,37 @@ def get_total_results(m, parameters, parts, Resources, scenario):
     investment_cost_tot=0
     static_variables={}
     
+    """Each scenario includes investments that is fixed by the scenario except for the trade off scenarios where the
+    model optimize for total cost of the system."""
     if 'Trade_off' in scenario:
         for part in parts:
             if 'static_variables' in dir(part):
                 if hasattr(part, 'investment_cost'):
-                    investment_cost[part.name]=part.investment_cost.value
-                    investment_cost_tot += part.investment_cost.value
+                    if not 'Existing' in part.name:
+                        investment_cost[part.name]=part.investment_cost.value
+                        investment_cost_tot += part.investment_cost.value
 
-                for v in part.static_variables:
-                    if v.value == 0:
-                        v.value = 'no investment'
-                    elif v.value == 1:
-                        v.value = 'yes invest max capacity'
-                    else:
-                        v.value = ('yes invest %s MW' %v.value)
-                    if 'Renovation' in part.name:
-                        if investment_cost[part.name] != 0:
-                            v.value = 'invest max capacity'
-                        else:
+                    for v in part.static_variables:
+                        if v.value == 0:
                             v.value = 'no investment'
-                    static_variables[part.name]=v.value           
+                        elif v.value == 1:
+                            v.value = 'yes invest max capacity'
+                        else:
+                            v.value = ('yes invest %s MW' %v.value)
+                        if 'Renovation' in part.name:
+                            if investment_cost[part.name] != 0:
+                                v.value = 'invest max capacity'
+                            else:
+                                v.value = 'no investment'
+                        static_variables[part.name]=v.value           
     else:
         static_variables[scenario] = ['No investment alternatives in this scenario']
 
+        for part in parts:
+            if hasattr(part, 'investment_cost'):
+                if not 'Existing' in part.name:
+                    investment_cost_tot += part.investment_cost
+    
     """Running cost for the system, in this case it only includes fuel cost"""
     from itertools import chain, product
     cost={}
@@ -167,7 +173,7 @@ def get_total_results(m, parameters, parts, Resources, scenario):
                         total_emissions += row
                 CO2_emissions=pd.DataFrame.from_dict(CO2_emissions)
     
-    total_results={'investment cost [MEUR/year]':investment_cost_tot, 'running cost [EUR/year]': cost_tot, 
+    total_results={'investment cost [EUR/year]':investment_cost_tot, 'running cost [EUR/year]': cost_tot, 
                     'total emissions [kg/year]':total_emissions}
     return total_results, static_variables, CO2_emissions
 

@@ -30,7 +30,7 @@ class Boiler(fs.Node):
 
         with fs.namespace(self):
             F = fs.VariableCollection(lb=0, ub=Fmax, name='F')
-            cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
+            inv = fs.VariableCollection(domain = fs.Domain.binary)
         
         self.test = {'Fmax':Fmax, 'eta': eta,
                     'running_cost' : running_cost, 'max_capacity': max_capacity}
@@ -42,18 +42,18 @@ class Boiler(fs.Node):
 
         self.state_variables = lambda t: {F(t)}
 
-        self.cap = cap
-        
+        self.inv = inv
         
         if max_capacity:
+            self.max_capacity = max_capacity
             self.constraints += self.max_production
-            self.investment_cost = cap * investment_cost
-            self.static_variables = {cap}
+            self.investment_cost = self.inv * investment_cost
+            self.static_variables = {inv}
         else: 
             self.static_variables = {}
         
     def max_production(self, t):
-        return fs.LessEqual(self.production[Resources.heat](t), self.cap)
+        return fs.LessEqual(self.production[Resources.heat](t), self.inv*self.max_capacity)
 
 class Accumulator(fs.Node):
     def __init__(self, resource=None, max_flow=0, max_energy=0,
@@ -87,7 +87,7 @@ class Accumulator(fs.Node):
         self.inv = inv
         
         if self.max_capacity:
-            self.investment_cost = self.inv * self.max_capacity * investment_cost
+            self.investment_cost = self.inv * investment_cost
             self.constraints += self.max_volume
             self.static_variables = {inv}
         else:
@@ -136,7 +136,7 @@ class LinearCHP(fs.Node):
 
         with fs.namespace(self):
             F = fs.VariableCollection(lb=Fmin, ub=Fmax, name='F')
-            cap = fs.Variable(lb=0, ub=max_capacity, name='cap')
+            inv = fs.VariableCollection(domain = fs.Domain.binary)
             Q_useful = fs.VariableCollection(lb=0, ub=Fmax, name='Q_useful')
             
         self.test={ 'fuel':fuel, 'alpha':alpha, 'eta':eta, 'Fmax':Fmax, 'max_capacity':max_capacity, 'taxation':taxation, 
@@ -153,22 +153,24 @@ class LinearCHP(fs.Node):
 
         self.state_variables = lambda t: {F(t), Q_useful(t)}
 
-        self.cap = cap
+        self.inv = inv
         
         self.constraints += self.production_limit
 
         if max_capacity:
+            self.max_capacity = max_capacity
             self.constraints += self.max_production
-            self.investment_cost = cap * investment_cost
-            self.static_variables =  {cap}
+            self.investment_cost = self.inv * investment_cost
+            self.static_variables =  {inv}
         else:
             self.static_variables = {}
+            self.investment_cost = investment_cost
     
     def production_limit(self, t):
         return fs.LessEqual(self.Q_useful(t), self.F(t))
 
     def max_production(self, t):
-        return fs.LessEqual(self.production[Resources.heat](t), self.cap)
+        return fs.LessEqual(self.production[Resources.heat](t), self.max_capacity*self.inv)
 
 
 class LinearSlowCHP(fs.Node):
@@ -198,15 +200,17 @@ class LinearSlowCHP(fs.Node):
         if max_capacity:
             Fmin=0.2*max_capacity*(1 + alpha) / eta
             Fmax=max_capacity*(1 + alpha) / eta
-            self.investment_cost =  inv * max_capacity * investment_cost
+            self.investment_cost =  self.inv * investment_cost
             self.constraints += self.max_production
             self.static_variables =  {inv}
         elif capacity:
             Fmin=0.2*capacity*(1 + alpha) / eta
             Fmax=capacity*(1 + alpha) / eta
             self.static_variables =  {}
+            self.investment_cost = investment_cost
         else:
             self.static_variables =  {}
+            self.investment_cost = investment_cost
 
         self.consumption[fuel] = lambda t: F_on(t) + modes['starting'](t) * Fmin
         self.production[Resources.heat] = lambda t: F_on(t) * eta / (alpha + 1)
@@ -296,10 +300,10 @@ class SolarPV(fs.Node):
                 self.PV_cap = PV_cap
                 self.investment_cost = PV_cap * investment_cost
                 self.constraints += self.max_production
-            else:
-                with fs.namespace(self): 
-                    PV_cap = capacity
+            else: 
+                PV_cap = capacity
                 self.static_variables = {}
+                self.investment_cost = investment_cost
             
         c1 = -0.0177162
         c2 = -0.040289
