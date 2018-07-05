@@ -28,7 +28,7 @@ class CityModel():
         self._DEFAULT_PARAMETERS = {
             'time_unit': pd.Timedelta('1h'),  # Time unit
             't_start': pd.Timestamp('2017-01-01'),
-            't_end': pd.Timestamp('2017-01-30'), 
+            't_end': pd.Timestamp('2017-12-30'), 
             'prices': { # €/MWh (LHV)
                 pl.Resources.natural_gas: 7777,
                 pl.Resources.power: 7777,
@@ -230,7 +230,7 @@ class CityModel():
 
         city = fs.Node(name='City')
         city.consumption[pl.Resources.heat] =  lambda t: heat_history['Other'][t]*2
-        city.consumption[pl.Resources.power] = lambda t: power_demand['Power demand'][t] 
+        city.consumption[pl.Resources.power] = lambda t: power_demand['Power demand'][t]
         city.cost = lambda t: 0
         city.state_variables = lambda t: ()
         parts.add(city)
@@ -453,9 +453,9 @@ if __name__ == "__main__":
     from read_data import read_data
     data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    for year in ['2030']:#, '2050']:
+    for year in ['2030','2050']:
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['BAU', 'Trade_off']: #'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()
