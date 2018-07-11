@@ -76,7 +76,7 @@ class CityModel():
         return read_file
     
     def get_heat_history(self, time_unit):
-        heat_history = self.read_csv('C:/Users/lovisaax/Desktop/heat_history.csv')
+        heat_history = self.read_csv('C:/Users/lovisaax/Desktop/data.csv')
         return heat_history.resample(time_unit).sum()
     
     def get_heat_history_industry(self, time_unit):
@@ -193,7 +193,7 @@ class CityModel():
 
         if not 'Trade_off' in scenario:
             renovation = fs.Node(name = input_data['Renovation']['name'])
-            renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]
+            renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['DH'][t]
             renovation.state_variables = lambda t: ()
             renovation.cost = lambda t: 0
             parts.add(renovation)
@@ -219,7 +219,7 @@ class CityModel():
             renovation_15.state_variables = lambda t: ()
             renovation_15.static_variables ={inv_15, inv_2}
 
-            renovation_15.consumption[pl.Resources.heat]= lambda t: - renovation_data_15['Other'][t]*inv_15 - 0*inv_2
+            renovation_15.consumption[pl.Resources.heat]= lambda t: - renovation_data_15['DH'][t]*inv_15 - 0*inv_2
 
             renovation_15.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Renovation_15']['lifespan'],input_data['Renovation_15']['investment_cost']) * inv_15 + 0 * inv_2
             renovation_15.cost = lambda t:0
@@ -229,14 +229,14 @@ class CityModel():
             renovation_const_2 = fs.Eq(inv_1 + inv_2 + inv_15, 1)
 
         city = fs.Node(name='City')
-        city.consumption[pl.Resources.heat] =  lambda t: heat_history['Other'][t]*2
+        city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
         city.consumption[pl.Resources.power] = lambda t: power_demand['Power demand'][t]
         city.cost = lambda t: 0
         city.state_variables = lambda t: ()
         parts.add(city)
 
         Industry = fs.Node(name='Industry')
-        Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['Other'][t]*2 #heat_history_industry['Industrial'][t] 
+        Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['DH'][t] #heat_history_industry['Industrial'][t] 
         Industry.cost = lambda t: 0
         Industry.state_variables = lambda t: ()
         parts.add(Industry)
@@ -255,7 +255,7 @@ class CityModel():
         power_maximum = fs.LessEqual(power, 60000)
 
         parts.add(powerExport)
-        
+
         CO2 = fs.Node(name = 'CO2_emissions')
         capacity=50000/hour
         quantity = fs.VariableCollection(lb=0, ub=capacity)
@@ -453,9 +453,9 @@ if __name__ == "__main__":
     from read_data import read_data
     data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    for year in ['2030','2050']:
+    for year in ['2050']: #'2050
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['Max_RES']:#'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()

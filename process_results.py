@@ -152,11 +152,14 @@ def get_total_results(m, parameters, parts, Resources, scenario):
     
     """Running cost for the system, in this case it only includes fuel cost"""
     from itertools import chain, product
-    cost={}
+    cost = {}
+    for p in parts:
+        cost[p.name] = 0
+    
     cost_tot=0
     for part, t in product(parts, m.times_between(parameters['t_start'],parameters['t_end'])):
         if part.cost(t):
-            cost[part.name]=part.cost(t).value
+            cost[part.name] +=part.cost(t).value
             cost_tot += part.cost(t).value
     
     """The CO2 emissions from the system"""

@@ -25,7 +25,7 @@ class Boiler(fs.Node):
     """docstring for Boiler"""
 
     def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, 
-                investment_cost = None, running_cost=1, max_capacity=None, **kwargs):
+                investment_cost = None, running_cost=0, max_capacity=None, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
@@ -206,7 +206,7 @@ class LinearSlowCHP(fs.Node):
         self.production[Resources.heat] = lambda t: F_on(t) * eta / (alpha + 1)
         self.production[Resources.power] = lambda t: alpha * self.production[Resources.heat](t)
 
-        self.cost = lambda t : self.consumption[fuel](t) * 1 #_CHP_cost_func(self, taxation, fuel)
+        self.cost = lambda t : self.consumption[fuel](t) * 0 #_CHP_cost_func(self, taxation, fuel)
     
         on_or_starting = lambda t: modes['on'](t) + modes['starting'](t)
         def mode_constraints(t):
