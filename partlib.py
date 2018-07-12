@@ -126,29 +126,26 @@ def _CHP_cost_func(node, taxation, fuel):
 class LinearCHP(fs.Node):
     """docstring for LinearCHP"""
 
-    def __init__(self, fuel=None, alpha=None, eta=None, Fmin=0, Fmax=None, taxation=None, 
+    def __init__(self, fuel=None, alpha=None, eta=None, Fmax=None, taxation=None, 
                 investment_cost=None, running_cost=0, max_capacity=None, **kwargs):        
         super().__init__(**kwargs)
 
         with fs.namespace(self):
-            F = fs.VariableCollection(lb=Fmin, ub=Fmax, name='F')
+            F = fs.VariableCollection(lb=0, ub=Fmax, name='F')
             inv = fs.Variable(domain = fs.Domain.binary)
-            Q_useful = fs.VariableCollection(lb=0, ub=Fmax, name='Q_useful')
             
         self.test={ 'fuel':fuel, 'alpha':alpha, 'eta':eta, 'Fmax':Fmax, 'max_capacity':max_capacity, 'taxation':taxation, 
                     'investment_cost':investment_cost}
         
         self.F=F
-        self.Q_useful=Q_useful
 
         self.consumption[fuel] = F
-        self.production[Resources.heat] = lambda t: Q_useful(t) * eta / (alpha + 1)
-        self.production[Resources.power] = lambda t: alpha * Q_useful(t) * eta / (alpha + 1)
+        self.production[Resources.heat] = lambda t: F(t) * eta / (alpha + 1)
+        self.production[Resources.power] = lambda t: alpha * F(t) * eta / (alpha + 1)
         self.cost = lambda t: F(t) * running_cost  #_CHP_cost_func(self, taxation, fuel)
 
-        self.state_variables = lambda t: {F(t), Q_useful(t)}
+        self.state_variables = lambda t: {F(t)}
         self.inv = inv
-        self.constraints += self.production_limit
 
         if max_capacity:
             self.max_capacity = max_capacity
@@ -159,9 +156,6 @@ class LinearCHP(fs.Node):
             self.static_variables = {}
             self.investment_cost = investment_cost
     
-    def production_limit(self, t):
-        return fs.LessEqual(self.Q_useful(t), self.F(t))
-
     def max_production(self, t):
         return fs.LessEqual(self.production[Resources.heat](t), self.max_capacity*self.inv)
 

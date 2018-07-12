@@ -28,7 +28,7 @@ class CityModel():
         self._DEFAULT_PARAMETERS = {
             'time_unit': pd.Timedelta('1h'),  # Time unit
             't_start': pd.Timestamp('2017-01-01'),
-            't_end': pd.Timestamp('2017-12-30'), 
+            't_end': pd.Timestamp('2017-01-30'), 
             'prices': { # €/MWh (LHV)
                 pl.Resources.natural_gas: 7777,
                 pl.Resources.power: 7777,
@@ -299,7 +299,9 @@ class CityModel():
         production_CHP_B=fs.Sum(CHP_B.production[pl.Resources.heat](t) for t in times)
         parts.add(CHP_B) 
 
-        limit = (sum(heat_history['Other'])*2 + sum(heat_history_industry['Other']))*0.01 #Should be 10% of energy production instead, this is test limit
+        test_1 = sum(heat_history['DH'][t] for t in times)
+        test_2 = sum(heat_history_industry['DH'][t] for t in times)
+        limit = float((test_1 + test_2)*0.1) #should be 10% of energy production, not demand, this is test limit
         min_prod = fs.LessEqual(limit, production_CHP_A + production_CHP_B)
 
         parts.add(
@@ -356,7 +358,7 @@ class CityModel():
                 fuel=pl.Resources.waste,
                 alpha=0.46,
                 eta=0.81,
-                Fmin= 2.5/hour,
+                #Fmin= 2.5/hour,
                 Fmax= 45/hour, # Update to reflect 25 MW output max according to D4.2 p 32 
                 taxation=taxation))  
 
@@ -453,9 +455,9 @@ if __name__ == "__main__":
     from read_data import read_data
     data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    for year in ['2050']: #'2050
+    for year in ['2030']: #'2050
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['Max_RES']:#'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['Trade_off']:#'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()
