@@ -16,10 +16,12 @@ def process_results(model, parameters, Resources, year, scenario, data):
     [total_results, static_variables, CO2_emissions] = get_total_results(m, parameters, parts, Resources, scenario)
 
     waste_consumers=waste_consumption(m, parameters, parts, Resources)
+    import_resources = resource_consumption(m, parameters, parts, Resources)
 
     total= {'input for scenario':input_data, 'input investment_data':investment_data, 'production':production, 
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 'stored_energy':stored_energy,
-    'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power':power, 'power_consumers': power_consumers}
+    'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power':power, 'power_consumers': power_consumers,
+    'import resources': import_resources}
     save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
 
 def get_investment_data(parts, scenario):
@@ -194,6 +196,28 @@ def waste_consumption(m, parameters, parts, Resources):
     waste_consumers = pd.DataFrame.from_dict(waste_consumers)
 
     return waste_consumers
+
+def resource_consumption(m, parameters, parts, Resources):
+
+    for part in parts:
+        if 'Import' in part.name:
+            times=m.times_between(parameters['t_start'],parameters['t_end'])
+            if 'Import(Resources.waste)' in part.name:
+                waste_prod = {part.name: fs.get_series(part.production[Resources.waste], times)}
+                waste_1 = sum(waste_prod.values())
+                waste_import = sum(waste_1)
+            if 'Import(Resources.power)' in part.name:
+                power_prod = {part.name: fs.get_series(part.production[Resources.power], times)}
+                power_1 = sum(power_prod.values())
+                power_import = sum(power_1)
+            if 'Import(Resources.natural_gas)' in part.name:
+                natural_gas_prod = {part.name: fs.get_series(part.production[Resources.natural_gas], times)}
+                natural_gas = sum(natural_gas_prod.values())
+                natural_gas_import = sum(natural_gas)
+    
+    import_resources ={'waste import': waste_import, 'power import': power_import, 'natural gas import' : natural_gas_import}
+    return import_resources
+
 
 def waste_incinerator_modes(m, parameters, parts, Resources):
     

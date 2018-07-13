@@ -28,7 +28,7 @@ class CityModel():
         self._DEFAULT_PARAMETERS = {
             'time_unit': pd.Timedelta('1h'),  # Time unit
             't_start': pd.Timestamp('2017-01-01'),
-            't_end': pd.Timestamp('2017-01-30'), 
+            't_end': pd.Timestamp('2017-12-30'), 
             'prices': { # €/MWh (LHV)
                 pl.Resources.natural_gas: 7777,
                 pl.Resources.power: 7777,
@@ -270,7 +270,14 @@ class CityModel():
         CO2_maximum = fs.LessEqual(emissions, 100000000) #below 24 069 146 limit the CO2 emissions
         
         parts.add(CO2)
-
+        
+        heating = fs.Node(name='Heating')
+        heating.consumption[pl.Resources.natural_gas] = lambda t: heat_history['Other'][t]*0.6/0.95 #verkningsgrad gasuppvärmning
+        heating.consumption[pl.Resources.power] = lambda t: heat_history['Other'][t]*0.4/0.97  #verkningsgrad eluppvärmning
+        heating.cost = lambda t: 0
+        heating.state_variables = lambda t: {}
+        parts.add(heating)
+        
         CHP_A = pl.LinearSlowCHP(
                 name='Existing CHP A',
                 eta=0.776, # was 77.6
