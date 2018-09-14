@@ -55,7 +55,7 @@ class Boiler(fs.Node):
 
 class Accumulator(fs.Node):
     def __init__(self, resource=None, max_flow=0, max_energy=0,
-                 loss_factor=0, max_capacity=None, investment_cost=None, t_start = '2017-01-01', t_end='2017-01-02', **kwargs):
+                 loss_factor=0, max_capacity=None, investment_cost=None, t_start = '2016-01-01', t_end='2016-01-02', **kwargs):
         super().__init__(**kwargs)
         with fs.namespace(self):
             volume = fs.VariableCollection(lb=0,
@@ -295,9 +295,9 @@ class SolarPV(fs.Node):
             if G[t] == 0:
                 prod = PV_cap * 0  
             else: 
-                G[t] = abs(G[t]/Gstc)
+                G[t] = abs(G[t]/(Gstc*1000))
                 T[t] = (T[t] + coef_temp_PV * G[t]) -Tstc
-                prod = PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
+                prod = 5#PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
             return prod
 
         self.cost = lambda t: 0

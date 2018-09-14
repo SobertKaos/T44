@@ -27,8 +27,8 @@ class CityModel():
         self.solution = None
         self._DEFAULT_PARAMETERS = {
             'time_unit': pd.Timedelta('1h'),  # Time unit
-            't_start': pd.Timestamp('2017-01-01'),
-            't_end': pd.Timestamp('2017-12-30'), 
+            't_start': pd.Timestamp('2016-01-01'),
+            't_end': pd.Timestamp('2016-01-30'), 
             'prices': { # €/MWh (LHV)
                 pl.Resources.natural_gas: 7777,
                 pl.Resources.power: 7777,
@@ -76,24 +76,28 @@ class CityModel():
         return read_file
     
     def get_heat_history(self, time_unit):
-        heat_history = self.read_csv('C:/Users/lovisaax/Desktop/data.csv')
+        heat_history = self.read_csv('C:/Users/lovisaax/Desktop/data/test_heat_history.csv')#data.csv')
         return heat_history.resample(time_unit).sum()
     
     def get_heat_history_industry(self, time_unit):
-        heat_history_industry = self.read_csv('C:/Users/lovisaax/Desktop/industrial_load_generated.csv')
+        heat_history_industry = self.read_csv('C:/Users/lovisaax/Desktop/data/industrial_heat_load.csv')#heat_history_industry.csv')
         return heat_history_industry.resample(time_unit).sum()
-    
+
+    def get_solar_data(self, time_unit):
+        solar_data = self.read_csv('C:/Users/lovisaax/Desktop/data/solar_data.csv')#solar_data_2017.csv')
+        return solar_data.resample(time_unit).sum()
+    """
     def get_solar_data(self, time_unit):
         solar_data = pd.read_csv(
-            'C:/Users/lovisaax/Desktop/solar_data_2017.csv',
+            'C:/Users/lovisaax/Desktop/data/solar_data.csv',#solar_data_2017.csv',
                 encoding='utf-8',
-                index_col='Time',
+                index_col='Time (UTC)',
                 parse_dates=True,
                 squeeze=True)
         return solar_data.resample(time_unit).sum()
-    
+    """
     def get_power_demand(self, time_unit):
-        power_demand = self.read_csv('C:/Users/lovisaax/Desktop/power_demand.csv')
+        power_demand = self.read_csv('C:/Users/lovisaax/Desktop/data/test_power_demand.csv')#power_demand.csv')
         return power_demand.resample(time_unit).sum()
     """
     def get_power_price(self, time_unit):
@@ -162,8 +166,7 @@ class CityModel():
 
         heat_history = self.get_heat_history(parameters['time_unit'])
         power_demand = self.get_power_demand(parameters['time_unit'])
-        heat_history_industry = self.get_heat_history(parameters['time_unit'])*(2/3) #self.get_heat_history_industry(parameters['time_unit'])
-
+        heat_history_industry = self.get_heat_history_industry(parameters['time_unit']) #self.get_heat_history_industry(parameters['time_unit'])
         heat_history = round(heat_history)
         power_demand = round(power_demand)
         heat_history_industry = round(heat_history_industry)
@@ -178,7 +181,7 @@ class CityModel():
                             price=parameters['prices'][r],
                             name='Import({})'.format(r),
                             CO2_factor=parameters['CO2_factor'][r]))
-
+        
         # Conversion factor from hour to model time unit:
         # "hour" is the number of model time steps per hour.
         # So when capacities/consumption/etc per time step in plants below
@@ -187,7 +190,16 @@ class CityModel():
         # larger max output per time step.
         
         hour = pd.Timedelta('1h') / parameters['time_unit']
-        
+        """
+        if year == '2050':
+            if scenario == 'BAU':
+                heat_history['DH'] = heat_history['DH']*(0.8*(input_data['DH_grid_expansion']['capacity']/(sum(heat_history['DH'])*1000))+1)
+                heat_history_industry['DH'] = heat_history_industry['DH']*(0.2*(input_data['DH_grid_expansion']['capacity']/(sum(heat_history_industry['DH'])*1000))+1)
+
+            if scenario == 'Max_DH':
+                heat_history['DH'] = heat_history['DH']*(0.8*(input_data['DH_grid_expansion']['capacity']/(sum(heat_history['DH'])*1000))+1)
+                heat_history_industry['DH'] = heat_history_industry['DH']*(0.2*(input_data['DH_grid_expansion']['capacity']/(sum(heat_history_industry['DH'])*1000))+1)
+        """
         renovation_data_1 = self.get_heat_history(parameters['time_unit'])*0.01 #change to renovation data when available
         renovation_data_15 =self.get_heat_history(parameters['time_unit'])*0.015 #change to renovation data when available
 
@@ -230,19 +242,19 @@ class CityModel():
 
         city = fs.Node(name='City')
         city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
-        city.consumption[pl.Resources.power] = lambda t: power_demand['Power demand'][t]
+        city.consumption[pl.Resources.power] = lambda t: 15 #power_demand['Power demand'][t]
         city.cost = lambda t: 0
-        city.state_variables = lambda t: ()
+        city.state_variables = lambda t: {}
         parts.add(city)
 
         Industry = fs.Node(name='Industry')
         Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['DH'][t] #heat_history_industry['Industrial'][t] 
         Industry.cost = lambda t: 0
-        Industry.state_variables = lambda t: ()
+        Industry.state_variables = lambda t: {}
         parts.add(Industry)
 
         powerExport = pl.Export(resource = pl.Resources.power,
-                             capacity=1000 / hour, # Arbitrarily chosen, assumed higher than combined production
+                             capacity=1000000000 / hour, # Arbitrarily chosen, assumed higher than combined production
                              price = parameters['prices'][pl.Resources.power]/10,
                              name='power export')
         
@@ -252,12 +264,12 @@ class CityModel():
         powerExport.time_unit = pd.Timedelta('1h')
         times = powerExport.times_between(t_start, t_end)
         power = fs.Sum(powerExport.consumption[pl.Resources.power](t) for t in times)
-        power_maximum = fs.LessEqual(power, 60000)
+        power_maximum = fs.LessEqual(power, 6000000000)
 
         parts.add(powerExport)
 
         CO2 = fs.Node(name = 'CO2_emissions')
-        capacity=50000/hour
+        capacity=50000000/hour
         quantity = fs.VariableCollection(lb=0, ub=capacity)
         CO2.consumption[pl.Resources.CO2] = lambda t: quantity(t)
         CO2.cost = lambda t: 0
@@ -267,17 +279,23 @@ class CityModel():
         CO2.time_unit = pd.Timedelta('1h')
         times = CO2.times_between(parameters['t_start'], parameters['t_end'])
         emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
-        CO2_maximum = fs.LessEqual(emissions, 100000000) #below 24 069 146 limit the CO2 emissions
-        
+        CO2_maximum = fs.LessEqual(emissions, 100000000000) #below 24 069 146 limit the CO2 emissions
         parts.add(CO2)
         
-        heating = fs.Node(name='Heating')
-        heating.consumption[pl.Resources.natural_gas] = lambda t: heat_history['Other'][t]*0.6/0.95 #verkningsgrad gasuppvärmning
-        heating.consumption[pl.Resources.power] = lambda t: heat_history['Other'][t]*0.4/0.97  #verkningsgrad eluppvärmning
+        heating = fs.Node(name='Heating') #se till att heat_history['Other'] minskar när DH byggs ut och blir större
+        heating.consumption[pl.Resources.natural_gas] = lambda t: heat_history['Other'][t]*0.8/0.95 #verkningsgrad gasuppvärmning
+        #heating.consumption[pl.Resources.power] = lambda t: 10 #heat_history['Other'][t]*0.2/0.97  #verkningsgrad eluppvärmning
         heating.cost = lambda t: 0
         heating.state_variables = lambda t: {}
         parts.add(heating)
-        
+
+        """
+        el_heat = fs.Node(name='el_heat')
+        el_heat.consumption[pl.Resources.power] = lambda t: 8 #heat_history['Other'][t]*0.08/0.97
+        el_heat.cost = lambda t: 0
+        el_heat.state_variables = lambda t: ()
+        parts.add(el_heat)
+        """
         CHP_A = pl.LinearSlowCHP(
                 name='Existing CHP A',
                 eta=0.776, # was 77.6
@@ -409,7 +427,6 @@ class CityModel():
                     taxation = input_data['CHP invest']['taxation'],  #ska vara taxation här men fick inte rätt då
                     investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP invest']['lifespan'], input_data['CHP invest']['investment_cost'])))
 
-
         parts.add(
             pl.SolarPV(
                 name = input_data['SolarPV']['name'],
@@ -462,9 +479,9 @@ if __name__ == "__main__":
     from read_data import read_data
     data=read_data('C:/Users/lovisaax/Documents/Sinfonia/scenario_data_v2.xlsx')
 
-    for year in ['2030']: #'2050
+    for year in ['2050']: #'2050
         input_parameters=data[year+'_input_parameters']
-        for scenario in ['Trade_off']:#'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
+        for scenario in ['BAU']:#'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
             input_data=data[year+'_'+scenario]
             model = CityModel(input_data, input_parameters, year, scenario)
             model.RunModel()

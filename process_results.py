@@ -11,7 +11,7 @@ def process_results(model, parameters, Resources, year, scenario, data):
 
     input_data = get_input_data(parts, data)
     investment_data=get_investment_data(parts, scenario)
-    production, stored_energy, power = production_results(m, parameters, parts, Resources)
+    production, stored_energy, power_production = production_results(m, parameters, parts, Resources)
     consumption, power_consumers = consumption_results(m, parameters, parts, Resources)
     [total_results, static_variables, CO2_emissions] = get_total_results(m, parameters, parts, Resources, scenario)
 
@@ -20,7 +20,7 @@ def process_results(model, parameters, Resources, year, scenario, data):
 
     total= {'input for scenario':input_data, 'input investment_data':investment_data, 'production':production, 
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 'stored_energy':stored_energy,
-    'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power':power, 'power_consumers': power_consumers,
+    'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power_production':power_production, 'power_consumers': power_consumers,
     'import resources': import_resources}
     save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
 
@@ -76,7 +76,6 @@ def consumption_results(m, parameters, parts, Resources):
                 fs.get_series(p.consumption[Resources.power], times) 
                 for p in power_consumer_names}
     power_consumers = pd.DataFrame.from_dict(power_consumers)
-
     return consumers, power_consumers
 
 def production_results(m, parameters, parts, Resources):
@@ -110,10 +109,9 @@ def production_results(m, parameters, parts, Resources):
         fs.get_series(p.production[Resources.power], times)
         for p in power_producers}
 
-    power = pd.DataFrame.from_dict(power) 
-
+    power_production = pd.DataFrame.from_dict(power) 
     
-    return heat, stored_energy, power
+    return heat, stored_energy, power_production
     
 def get_total_results(m, parameters, parts, Resources, scenario):
     """Gather the investment cost for the system, including which investment options to invest in"""
