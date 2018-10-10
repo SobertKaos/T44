@@ -35,17 +35,17 @@ class DispatchModel(fs.Part):
             cost_contributors = parts
         else:
             cost_contributors = filter(self.require_cost, parts)
-        running_cost = fs.Sum(p.cost(t) for p, t in product(cost_contributors, opt_times))
-
-        investment_cost = fs.Sum(p.investment_cost for p in parts if ('investment_cost' in dir(p)))    
-
-        system_cost = fs.Add(running_cost, investment_cost)
+        running_cost = [p.cost(t) for p, t in product(cost_contributors, opt_times)]
+        investment_cost = [p.investment_cost for p in parts if ('investment_cost' in dir(p))]    
+        costs = running_cost + investment_cost
+        
+        system_cost = fs.Sum(c for c in costs)
 
         problem = fs.Problem()
         problem.objective = fs.Minimize(system_cost)
         problem += (p.constraints.make(t) for p, t in product(parts, opt_times))
-
-        problem += self.timeindependent_constraint
+        if self.timeindependent_constraint:
+            problem += self.timeindependent_constraint
 
         solver = fs.get_solver()
         solution = solver.solve(problem)
@@ -56,4 +56,4 @@ class DispatchModel(fs.Part):
         for p in parts:
             if 'static_variables' in dir(p):
                 for v in p.static_variables:
-                    v.take_value(solution)              
+                    v.take_value(solution) 

@@ -103,3 +103,7 @@ ENV/
 data_path.txt
 *.sol
 *.lp
+*.mps
+*.json
+*.csv
+*.xlsx

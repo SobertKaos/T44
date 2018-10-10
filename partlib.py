@@ -129,16 +129,19 @@ class LinearCHP(fs.Node):
     def __init__(self, fuel=None, alpha=None, eta=None, Fmax=None, taxation=None, 
                 investment_cost=None, running_cost=0, max_capacity=None, **kwargs):        
         super().__init__(**kwargs)
+        try:
+            if math.isnan(Fmax):
+                Fmax = max_capacity
+        except TypeError:
+            import pdb; pdb.set_trace()
 
         with fs.namespace(self):
             F = fs.VariableCollection(lb=0, ub=Fmax, name='F')
-            inv = fs.Variable(domain = fs.Domain.binary)
+            inv = fs.Variable(domain = fs.Domain.binary, name='inv_chp')
             
         self.test={ 'fuel':fuel, 'alpha':alpha, 'eta':eta, 'Fmax':Fmax, 'max_capacity':max_capacity, 'taxation':taxation, 
                     'investment_cost':investment_cost}
         
-        self.F=F
-
         self.consumption[fuel] = F
         self.production[Resources.heat] = lambda t: F(t) * eta / (alpha + 1)
         self.production[Resources.power] = lambda t: alpha * F(t) * eta / (alpha + 1)
@@ -154,7 +157,6 @@ class LinearCHP(fs.Node):
             self.static_variables =  {inv}
         else:
             self.static_variables = {}
-            self.investment_cost = investment_cost
     
     def max_production(self, t):
         return fs.LessEqual(self.production[Resources.heat](t), self.max_capacity*self.inv)
@@ -283,29 +285,23 @@ class SolarPV(fs.Node):
             PV_cap = fs.Variable(lb=0, ub=max_capacity, name='PV_cap')
             self.PV_cap = PV_cap
             self.investment_cost = PV_cap * investment_cost
-            self.constraints += self.max_production
             self.static_variables =  {PV_cap}
         else: 
             PV_cap = capacity
-            self.PV_cap = PV_cap
-            self.investment_cost = investment_cost
-            self.static_variables = {}            
-
+            self.PV_cap = PV_cap         
+        print('!! -- PV PROD IS NOT DEFINED CORRECTLY -- !!')
         def prod(t):
             if G[t] == 0:
                 prod = PV_cap * 0  
             else: 
                 G[t] = abs(G[t]/(Gstc*1000))
                 T[t] = (T[t] + coef_temp_PV * G[t]) -Tstc
-                prod = 5#PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
+                prod = PV_cap * 35#PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
             return prod
 
         self.cost = lambda t: 0
         self.production[Resources.power] =lambda t: prod(t)
         self.state_variables = lambda t: {}
-
-    def max_production(self, t):
-        return fs.LessEqual(self.production[Resources.power](t), self.PV_cap)
 
 class PipeLoss(fs.Node):
     """ docstring for PipeLoss """
@@ -345,7 +341,7 @@ class Import(fs.Node):
 class Export(fs.Node):
     """ docstring for Export """
 
-    def __init__(self, resource=None, capacity=None, price=None, **kwargs):
+    def __init__(self, resource=None, capacity=None, price=0, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):

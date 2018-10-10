@@ -22,7 +22,7 @@ def process_results(model, parameters, Resources, year, scenario, data):
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 'stored_energy':stored_energy,
     'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power_production':power_production, 'power_consumers': power_consumers,
     'import resources': import_resources}
-    save_results_excel(m, parameters, year, scenario, total, 'C:/Users/lovisaax/Desktop/test/')
+    save_results_excel(m, parameters, year, scenario, total, 'C:/Users/AlexanderKa/Desktop/Github/T4-4/output/')
 
 def get_investment_data(parts, scenario):
     """Gather the input data for the investment options in the model and returns it as a dictionary"""
