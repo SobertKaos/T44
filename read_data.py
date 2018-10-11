@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
+import partlib as pl
 
 def read_data(file_name=None):
     '''Read the data from Excel and save it in a dictionary'''
@@ -45,9 +46,20 @@ def read_data(file_name=None):
     '2050_Max_DH': Max_DH_2050, '2050_Max_Retrofit': Max_Retrofit_2050, '2050_Trade_off': Trade_off_2050, 
     '2050_Trade_off_CO2': Trade_off_CO2_2050 } #'inv_2030': inv_2030, 'inv_2050': inv_2050,  }
     
+    from partlib import Resources
+    resources = {
+        'biomass': Resources.biomass,
+        'heat': Resources.heat,
+        'natural_gas': Resources.natural_gas,
+        'waste': Resources.waste
+    }
+
     for scenario_name, scenario_data in data.copy().items():
         for unit, unit_specs in scenario_data.items():
             for spec_name, spec_value in unit_specs.items():
+                if spec_name == 'resource':
+                    if spec_value in resources.keys() :
+                        scenario_data[unit][spec_name] = resources[spec_value]
                 if spec_value == 'None':
                     scenario_data[unit][spec_name] = None
         data[scenario_name] = scenario_data
