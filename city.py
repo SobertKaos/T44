@@ -72,8 +72,8 @@ class CityModel():
         return heat_history_industry.resample(time_unit).sum()
 
     def get_solar_data(self, time_unit):
-        solar_data = self.read_csv('C:/Users/AlexanderKa/Desktop/Github/T4-4/input/solar_data.csv')
-        return solar_data.resample(time_unit).sum()
+        solar_data = self.read_csv('C:/Users/AlexanderKa/Desktop/Github/T4-4/input/Solar_data_Bolzano.csv')
+        return solar_data  #.resample(time_unit).sum()
     
     def get_power_demand(self, time_unit):
         power_demand = self.read_csv('C:/Users/AlexanderKa/Desktop/Github/T4-4/input/test_power_demand.csv')
@@ -301,8 +301,8 @@ class CityModel():
         parts.add(
             pl.SolarPV(
                 name = input_data['SolarPV']['name'],
-                G = solar_data['irradiation'],
-                T = solar_data['temperature'], 
+                G = solar_data['Mean Irradiance [W/m2]'],
+                T = solar_data['Mean temperature [C]'], 
                 max_capacity = None if input_data['SolarPV']['max_capacity'] is None else float(input_data['SolarPV']['max_capacity']),
                 capacity = input_data['SolarPV']['capacity']/hour, #Eller capacity borde väl inte anges för investment option
                 taxation = input_data['SolarPV']['taxation'], 

@@ -78,13 +78,14 @@ class Accumulator(fs.Node):
         self.state_variables = lambda t: {volume(t)}
 
         self.accumulation[self.resource] = self.compute_accumulation
-        #self.constraints += self.max_change_constraints
+        self.constraints += self.max_change_constraints
         self.inv = inv
         
         if max_capacity:
             self.max_capacity = max_capacity
             self.investment_cost = inv * investment_cost
             self.constraints += self.max_volume
+            self.timeindependent_constraint = fs.Eq(inv, 0)
             self.static_variables = {inv}
         else:
             self.static_variables = {}
@@ -97,8 +98,7 @@ class Accumulator(fs.Node):
         return fs.Eq(self.accumulation[self.resource](self.t_start), 0)
 
     def start_end_volume(self, t):
-        yield fs.Eq(self.volume(self.t_start),self.max_energy/2)
-        yield fs.Eq(self.volume(self.t_end), self.max_energy/2)         
+        return fs.Eq(self.volume(self.t_start),self.volume(self.t_end))
  
     def max_volume(self, t):
         return fs.LessEqual(self.volume(t), self.inv*self.max_capacity)
