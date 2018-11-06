@@ -39,11 +39,9 @@ class CityModel():
             }
         
     def RunModel(self):
-        print('Running model')
         seed = None
         parameters = self.get_parameters()
 
-        print("Making model")
         self.m = self.make_model(parameters, self.input_data, self.year, self.scenario, seed=seed)
         _start_time = pd.Timestamp.now()
 
@@ -100,7 +98,6 @@ class CityModel():
         if seed:
             raise NotImplementedError('Randomizer not supported')
 
-        print("Building model")
 
         parts, timeindependent_constraint = self.make_parts(parameters)
 
@@ -266,7 +263,6 @@ class CityModel():
         parts.add(pl.Boiler(name='Existing Boiler D', eta= 0.77, Fmax= 8.84 / hour, fuel=pl.Resources.natural_gas, taxation=taxation))
 
 
-        print('!! -- TRUE CAPACITY IS 45 MW - RUNNING AT 25 MW -- !!')
         # Running waste incinerator at 25 MW output max according to D4.2 p 32, techincal limit is 45
         parts.add(
             pl.LinearCHP(name='Existing Waste Incinerator', fuel=pl.Resources.waste, alpha=0.46, eta=0.81, Fmax= 25/hour, taxation=taxation)
@@ -279,7 +275,7 @@ class CityModel():
         """ Production alternatives for the scenarios"""
         
         solar_data=self.get_solar_data(parameters['time_unit'])
-        print("""!! -- Dividing investment cost LinearCHP by max_capacity so cost is EUR/MW-- !!""")
+
         parts.add(
             pl.LinearCHP(
                 name = input_data['CHP']['name'],
@@ -288,7 +284,7 @@ class CityModel():
                 Fmax = input_data['CHP']['capacity'] /hour,
                 fuel =  input_data['CHP']['resource'],
                 taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
-                investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost']) / (input_data['CHP']['max_capacity'] if input_data['CHP']['max_capacity'] else 1),
+                investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost']) / (input_data['CHP']['max_capacity'] if 'Trade_off' in scenario else 1),
                 max_capacity =  input_data['CHP']['max_capacity']
                 )
         )
@@ -421,7 +417,6 @@ price_scenarios = {
 
 
 if __name__ == "__main__":
-    print('Running city.py standalone')
     import pdb
     import winsound
     from read_data import read_data

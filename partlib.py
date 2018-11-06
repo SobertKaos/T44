@@ -276,8 +276,8 @@ class SolarPV(fs.Node):
         c5 = 0.000169
         c6 = 0.000005
 
-        Gstc=1
-        Tstc=25
+        Gstc=1000 #W/m2
+        Tstc=25 #degrees C
         coef_temp_PV = 0.035
         
         if max_capacity:              
@@ -288,14 +288,17 @@ class SolarPV(fs.Node):
         else: 
             PV_cap = capacity
             self.PV_cap = PV_cap         
-        print('!! -- PV PROD IS NOT DEFINED CORRECTLY -- !!')
         def prod(t):
             if G[t] == 0:
                 prod = PV_cap * 0  
             else: 
-                G[t] = abs(G[t]/(Gstc*1000))
-                T[t] = (T[t] + coef_temp_PV * G[t]) -Tstc
-                prod = PV_cap * 35#PV_cap* (G[t]*(1 + c1*math.log10(G[t]) + c2*(math.log10(G[t]))**2 + c3*T[t] + c4*T[t]*math.log10(G[t]) + c5*T[t]*(math.log10(G[t]))**2 + c6*(T[t])**2))
+                G_c = abs(G[t]/(Gstc))
+                T_c = (T[t] + coef_temp_PV * G[t]) -Tstc
+                # Factor is W/installed W_peak, from: Norwood, Z., Nyholm, E., Otanicar, T. and Johnsson, F., 2014 . 
+                # A geospatial comparison of distributed solar heat and power in Europe and the US . PloS one, 9(12), p.e112442
+                factor = (G_c*(1 + c1*math.log10(G_c) + c2*(math.log10(G_c))**2 + c3*T_c + c4*T_c*math.log10(G_c) + c5*T_c*(math.log10(G_c))**2 + c6*(T_c)**2))
+                prod = PV_cap* factor
+                
             return prod
 
         self.cost = lambda t: 0
