@@ -85,7 +85,6 @@ class Accumulator(fs.Node):
             self.max_capacity = max_capacity
             self.investment_cost = inv * investment_cost
             self.constraints += self.max_volume
-            self.timeindependent_constraint = fs.Eq(inv, 0)
             self.static_variables = {inv}
         else:
             self.static_variables = {}

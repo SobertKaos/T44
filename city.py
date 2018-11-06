@@ -63,8 +63,8 @@ class CityModel():
         return read_file
     
     def get_heat_history(self, time_unit):
-        heat_history = pd.read_csv('C:/Users/alexanderka/desktop/Bolzano Heat/TEST.csv', index_col = 'Time (UTC)', parse_dates=True, delimiter=';')
-        heat_history['DH'] = heat_history['Test_A0H']
+        heat_history = pd.read_csv('C:/Users/alexanderka/desktop/Bolzano Heat with renovations.csv', index_col = 'Time (UTC)', parse_dates=True, delimiter=',')
+        #heat_history['DH'] = heat_history['Test_A0H']
         return heat_history
     
     def get_heat_history_industry(self, time_unit):
@@ -84,7 +84,7 @@ class CityModel():
         r = investment_cost*k
         return r
 
-    def get_parameters(self, **kwargs):
+    def get_parameters(self,  **kwargs):
         parameters = deepcopy(self._DEFAULT_PARAMETERS)
         parameters.update(kwargs)
         parameters['interest_rate'] = self.input_parameters['interest_rate']['interest_rate']
@@ -134,7 +134,7 @@ class CityModel():
         taxation = make_tax_function(parameters)
         heat_history = self.get_heat_history(parameters['time_unit'])
         power_demand = self.get_power_demand(parameters['time_unit'])
-        heat_history_industry = self.get_heat_history_industry(parameters['time_unit'])
+        #heat_history_industry = self.get_heat_history_industry(parameters['time_unit'])
         
         for r in pl.Resources:
             if r not in [pl.Resources.heat, pl.Resources.CO2]:
@@ -152,21 +152,29 @@ class CityModel():
         # Makes sense because larger time unit --> smaller value of "hour" -->
         # larger max output per time step.
         hour = pd.Timedelta('1h') / parameters['time_unit']
-
-        print('!! -- INCORRECT RENOVATION DATA -- !!')
-        renovation_data_1 = self.get_heat_history(parameters['time_unit'])*0.01 #change to renovation data when available
-        renovation_data_15 =self.get_heat_history(parameters['time_unit'])*0.015 #change to renovation data when available
+        
+        if self.year == '2030':
+            # All renovation data are negative numbers
+            renovation_data_1_DH = heat_history['2030 Renovation 1 per cent DH']
+            renovation_data_1_Other = heat_history['2030 Renovation 1 per cent Other']
+            renovation_data_15_DH = heat_history['2030 renovation 1.5 per cent DH']
+            renovation_data_15_Other = heat_history['2030 renovation 1.5 per cent Other']
+        else:
+            renovation_data_1_DH = heat_history['2050 Renovation 1 per cent DH']
+            renovation_data_1_Other = heat_history['2050 Renovation 1 per cent Other']
+            renovation_data_15_DH = heat_history['2050 renovation 1.5 per cent DH']
+            renovation_data_15_Other = heat_history['2050 renovation 1.5 per cent Other']
 
         if not 'Trade_off' in scenario:
             renovation = fs.Node(name = input_data['Renovation']['name'])
-            renovation.consumption[pl.Resources.heat]= lambda t: -renovation_data_1['DH'][t]
+            renovation.consumption[pl.Resources.heat]= lambda t: renovation_data_1_DH[t]
+            renovation.consumption[pl.Resources.natural_gas] = lambda t: renovation_data_1_Other[t]
             renovation.state_variables = lambda t: ()
             renovation.cost = lambda t: 0
             parts.add(renovation)
 
         else:
             
-            print('!! -- THIS PART NEEDS CLEANING  -- !!')
             renovation = fs.Node(name = input_data['Renovation']['name'])
             inv_1 = fs.Variable(name= 'inv_1', domain = fs.Domain.binary)
             inv_0 = fs.Variable(name= 'inv_0', domain = fs.Domain.binary)
@@ -174,7 +182,8 @@ class CityModel():
             renovation.state_variables = lambda t: {}
             renovation.static_variables = {inv_1}#!AK, inv_0}
 
-            renovation.consumption[pl.Resources.heat]= lambda t: - renovation_data_1['Other'][t]*inv_1 #!AK- 0*inv_0
+            renovation.consumption[pl.Resources.heat]= lambda t: renovation_data_1_DH[t]*inv_1
+            renovation.consumption[pl.Resources.natural_gas] = lambda t: renovation_data_1_Other[t]*inv_1
 
             renovation.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']) * inv_1 + 0 * inv_0
             renovation.cost = lambda t:0
@@ -187,7 +196,8 @@ class CityModel():
             renovation_15.state_variables = lambda t: {}
             renovation_15.static_variables ={inv_15}#!AK, inv_2}
 
-            renovation_15.consumption[pl.Resources.heat]= lambda t: - renovation_data_15['DH'][t]*inv_15 #!AK - 0*inv_2
+            renovation_15.consumption[pl.Resources.heat]= lambda t: renovation_data_15_DH[t]*inv_15
+            renovation_15.consumption[pl.Resources.natural_gas] = lambda t: renovation_data_15_Other[t]*inv_15
 
             renovation_15.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Renovation_15']['lifespan'],input_data['Renovation_15']['investment_cost']) * inv_15 #!AK+ 0 * inv_2
             renovation_15.cost = lambda t:0
@@ -196,25 +206,21 @@ class CityModel():
             #renovation_const = fs.Eq(inv_0 + inv_1, 1)
             #renovation_const_2 = fs.Eq(inv_1 + inv_2 + inv_15, 1)
             
-        print('!! -- INCORRECT HEAT HISTORY DATA AND NO CHANGE IN MAX_DH -- !!')
         city = fs.Node(name='City')
         city.cost = lambda t: 0
         city.state_variables = lambda t: {}
 
         if scenario in 'Max_DH':
-            city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
+            if self.year == '2030':
+                city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]+heat_history['2030 DH expansion'][t]
+            else:
+                city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]+heat_history['2050 DH expansion'][t]
         else:
             city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
 
         print('!! -- INCORRECT POWER DEMAND -- !!')
         city.consumption[pl.Resources.power] = lambda t: 15 #power_demand['Power demand'][t]
         parts.add(city) 
-
-        Industry = fs.Node(name='Industry')
-        Industry.consumption[pl.Resources.heat] = lambda t: heat_history_industry['DH'][t] 
-        Industry.cost = lambda t: 0
-        Industry.state_variables = lambda t: {}
-        parts.add(Industry)
 
         print('!! -- POWER EXPORT WAS DIVIDED BY 10, CHANGED TO 2, WHAT IS CORRECT? -- !!')
         powerExport = pl.Export(resource = pl.Resources.power,
@@ -233,9 +239,11 @@ class CityModel():
         emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
         CO2_maximum = fs.LessEqual(emissions, 100000000000) #below 24 069 146 limit the CO2 emissions
         
-        print('!! -- DECREASE HEATING CONSUMPTION AS DH IS EXPANDED -- !!')
         heating = fs.Node(name='Heating') #se till att heat_history['Other'] minskar när DH byggs ut och blir större
-        heating.consumption[pl.Resources.natural_gas] = lambda t: heat_history['Other'][t]*0.8/0.95 #verkningsgrad gasuppvärmning
+        if self.scenario in 'Max DH':
+            heating.consumption[pl.Resources.natural_gas] = lambda t: (heat_history['Other heating'][t]- heat_history['{} DH expansion'.format(self.year)][t])*0.8/0.95 #verkningsgrad gasuppvärmning
+        else:
+            heating.consumption[pl.Resources.natural_gas] = lambda t: (heat_history['Other heating'][t])*0.8/0.95 #verkningsgrad gasuppvärmning
         heating.consumption[pl.Resources.power] = lambda t: 10 #heat_history['Other'][t]*0.2/0.97  #verkningsgrad eluppvärmning
         heating.cost = lambda t: 0
         heating.state_variables = lambda t: {}
@@ -332,6 +340,86 @@ class CityModel():
         return parts, timeindependent_constraint
         
 
+price_scenarios = {
+    '2030' : {
+        'Italy medium' : {
+            'natural_gas': 38.62104,
+            'power': 247.19, 
+            'heat': 0,
+            'waste': 2,
+            'biomass': 22.43,
+            'CO2': 25,
+            'interest_rate': None,
+        },
+        'Italy pessimistic' : {
+            'natural_gas': 35.51381,
+            'power': 204.4159,
+            'heat': 0,
+            'waste': 2,
+            'biomass': 31.54,
+            'CO2': 34,
+            'interest_rate': None,
+        },
+        'SD' : {
+            'natural_gas': 30.39,
+            'power': 121.5048,
+            'heat': 0,
+            'waste': 2,
+            'biomass': 30.93,
+            'CO2': 80,
+            'interest_rate': None,
+        },
+        'NP' : {
+            'natural_gas': 34.81,
+            'power': 121.5048,
+            'heat': 0,
+            'waste': 2,
+            'biomass': 14.72,
+            'CO2': 29,
+            'interest_rate': None,
+        }
+    },
+    '2050' : {
+        'Italy medium' : {
+            'natural_gas': 31.04095,
+            'power': 233.90,
+            'heat': 0,
+            'waste': 2,
+            'biomass': 90.82,
+            'CO2': 234,
+            'interest_rate': None,
+        },
+        'Italy pessimistic' : {
+            'natural_gas': 40.64786,
+            'power': 202.4691,
+            'heat': 0,
+            'waste': 2,	
+            'biomass': 42.96,
+            'CO2': 90,
+            'interest_rate': None,
+        },
+        'SD' : {
+            'natural_gas': 34.47,
+            'power': 127.0048,
+            'heat': 0,
+            'waste': 2,
+            'biomass': 60.91,  
+            'CO2': 172,	
+            'interest_rate': None,
+        },
+        'NP' : {
+            'natural_gas': 41.62,
+            'power': 127.0048,
+            'heat': 0,
+            'waste': 2, 
+            'biomass': 22.68,
+            'CO2': 57,
+            'interest_rate': None,
+        }
+    }
+}
+
+
 if __name__ == "__main__":
     print('Running city.py standalone')
     import pdb
@@ -340,17 +428,22 @@ if __name__ == "__main__":
     data=read_data('C:/Users/AlexanderKa/Desktop/Github/T4-4/input/scenario_data_v2.xlsx')
     scenario_start_time = pd.Timestamp.now()
     print('Beginning scenario loop at {}'.format(scenario_start_time))
-    for year in ['2030', '2050']:
-        input_parameters=data[year+'_input_parameters']
-        for scenario in ['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off', 'Trade_off_CO2']: 
-            print('Running {}_{}'.format(year, scenario))
-            input_data=data[year+'_'+scenario]
-            model = CityModel(input_data, input_parameters, year, scenario)
-            model.RunModel()
-            parameters = model.get_parameters()
+    for price_scenario in ['Italy medium', 'Italy pessimistic', 'SD', 'NP']:
+        for year in ['2030', '2050']:
+            input_parameters=data[year+'_input_parameters']
+            interest_rate = input_parameters['prices']['interest_rate']
+            input_parameters['prices'] = price_scenarios[year][price_scenario]
+            input_parameters['prices']['interest_rate'] = interest_rate
 
-            from process_results import process_results
-            process_results(model, parameters, pl.Resources, year, scenario, input_data)
+            for scenario in ['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
+                print('Running {}_{}_{}'.format(year, scenario, price_scenario))
+                input_data=data[year+'_'+scenario]
+                model = CityModel(input_data, input_parameters, year, scenario)
+                model.RunModel()
+                parameters = model.get_parameters()
+
+                from process_results import process_results
+                process_results(model, parameters, pl.Resources, year, scenario, price_scenario, input_data)
     
     scenario_end_time = pd.Timestamp.now()
     print('Finished scenario loop at {}, total time elapsed: {}'.format(scenario_end_time, scenario_end_time-scenario_start_time))

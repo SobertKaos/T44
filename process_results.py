@@ -4,7 +4,7 @@ import friendlysam as fs
 import partlib as pl
 import pdb
 
-def process_results(model, parameters, Resources, year, scenario, data):
+def process_results(model, parameters, Resources, year, scenario, price_scenario, data):
 
     m = model.m
     parts=m.descendants
@@ -22,7 +22,7 @@ def process_results(model, parameters, Resources, year, scenario, data):
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 'stored_energy':stored_energy,
     'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power_production':power_production, 'power_consumers': power_consumers,
     'import resources': import_resources}
-    save_results_excel(m, parameters, year, scenario, total, 'C:/Users/AlexanderKa/Desktop/Github/T4-4/output/')
+    save_results_excel(m, parameters, year, scenario, price_scenario, total, 'C:/Users/AlexanderKa/Desktop/Github/T4-4/output/')
 
 def get_investment_data(parts, scenario):
     """Gather the input data for the investment options in the model and returns it as a dictionary"""
@@ -229,13 +229,13 @@ def waste_incinerator_modes(m, parameters, parts, Resources):
     
     return modes
 
-def save_results_excel(m, parameters, year, scenario, results, output_data_path):
+def save_results_excel(m, parameters, year, scenario, price_scenario ,results, output_data_path):
     """Write the results to on excelfile for each year and scenario"""
     import xlsxwriter
     import datetime
 
     try:
-        writer = pd.ExcelWriter(output_data_path+'output_%s_%s.xlsx' %(year, scenario), engine='xlsxwriter')
+        writer = pd.ExcelWriter(output_data_path+'output_%s_%s_%s.xlsx' %(year, scenario, price_scenario), engine='xlsxwriter')
 
         for item in results.items():
             key=item[0]
