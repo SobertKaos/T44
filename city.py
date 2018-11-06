@@ -438,10 +438,11 @@ if __name__ == "__main__":
             for scenario in ['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
                 print('Running {}_{}_{}'.format(year, scenario, price_scenario))
                 input_data=data[year+'_'+scenario]
+                
                 model = CityModel(input_data, input_parameters, year, scenario)
                 model.RunModel()
                 parameters = model.get_parameters()
-
+                
                 from process_results import process_results
                 process_results(model, parameters, pl.Resources, year, scenario, price_scenario, input_data)
     

@@ -17,11 +17,15 @@ def process_results(model, parameters, Resources, year, scenario, price_scenario
 
     waste_consumers=waste_consumption(m, parameters, parts, Resources)
     import_resources = resource_consumption(m, parameters, parts, Resources)
+    
+    prices = dict()
+    for resource, price in parameters['prices'].items():
+        prices[resource._name_] = price
 
     total= {'input for scenario':input_data, 'input investment_data':investment_data, 'production':production, 
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 'stored_energy':stored_energy,
     'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power_production':power_production, 'power_consumers': power_consumers,
-    'import resources': import_resources}
+    'import resources': import_resources, 'prices': prices}
     save_results_excel(m, parameters, year, scenario, price_scenario, total, 'C:/Users/AlexanderKa/Desktop/Github/T4-4/output/')
 
 def get_investment_data(parts, scenario):
