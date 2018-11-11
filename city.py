@@ -343,7 +343,7 @@ price_scenarios = {
             'power': 247.19, 
             'heat': 0,
             'waste': 2,
-            'biomass': 22.43,
+            'biomass': 23.33,
             'CO2': 25,
             'interest_rate': None,
         },
@@ -352,7 +352,7 @@ price_scenarios = {
             'power': 204.4159,
             'heat': 0,
             'waste': 2,
-            'biomass': 31.54,
+            'biomass': 32.80,
             'CO2': 34,
             'interest_rate': None,
         },
@@ -361,7 +361,7 @@ price_scenarios = {
             'power': 121.5048,
             'heat': 0,
             'waste': 2,
-            'biomass': 30.93,
+            'biomass': 32.16,
             'CO2': 80,
             'interest_rate': None,
         },
@@ -370,7 +370,7 @@ price_scenarios = {
             'power': 121.5048,
             'heat': 0,
             'waste': 2,
-            'biomass': 14.72,
+            'biomass': 15.31,
             'CO2': 29,
             'interest_rate': None,
         }
@@ -381,7 +381,7 @@ price_scenarios = {
             'power': 233.90,
             'heat': 0,
             'waste': 2,
-            'biomass': 90.82,
+            'biomass': 94.45,
             'CO2': 234,
             'interest_rate': None,
         },
@@ -390,7 +390,7 @@ price_scenarios = {
             'power': 202.4691,
             'heat': 0,
             'waste': 2,	
-            'biomass': 42.96,
+            'biomass': 44.67,
             'CO2': 90,
             'interest_rate': None,
         },
@@ -399,7 +399,7 @@ price_scenarios = {
             'power': 127.0048,
             'heat': 0,
             'waste': 2,
-            'biomass': 60.91,  
+            'biomass': 63.34,  
             'CO2': 172,	
             'interest_rate': None,
         },
@@ -408,7 +408,7 @@ price_scenarios = {
             'power': 127.0048,
             'heat': 0,
             'waste': 2, 
-            'biomass': 22.68,
+            'biomass': 23.58,
             'CO2': 57,
             'interest_rate': None,
         }
@@ -423,14 +423,14 @@ if __name__ == "__main__":
     data=read_data('C:/Users/AlexanderKa/Desktop/Github/T4-4/input/scenario_data_v2.xlsx')
     scenario_start_time = pd.Timestamp.now()
     print('Beginning scenario loop at {}'.format(scenario_start_time))
-    for price_scenario in ['Italy medium', 'Italy pessimistic', 'SD', 'NP']:
-        for year in ['2030', '2050']:
+    for price_scenario in ['Italy medium']: #, 'Italy pessimistic', 'SD', 'NP']:
+        for year in ['2030']: #, '2050']:
             input_parameters=data[year+'_input_parameters']
             interest_rate = input_parameters['prices']['interest_rate']
             input_parameters['prices'] = price_scenarios[year][price_scenario]
             input_parameters['prices']['interest_rate'] = interest_rate
 
-            for scenario in ['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
+            for scenario in ['Trade_off']: #['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
                 print('Running {}_{}_{}'.format(year, scenario, price_scenario))
                 input_data=data[year+'_'+scenario]
                 
