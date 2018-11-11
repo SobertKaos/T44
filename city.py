@@ -327,7 +327,7 @@ class CityModel():
                 fuel =  input_data['CHP']['resource'],
                 taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
                 investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost']) / (input_data['CHP']['max_capacity'] if 'Trade_off' in scenario else 1),
-                max_capacity =  input_data['CHP']['max_capacity']/hour
+                max_capacity =  input_data['CHP']['max_capacity']/hour if input_data['CHP']['max_capacity'] else input_data['CHP']['max_capacity']
                 )
         )
         
@@ -475,7 +475,7 @@ if __name__ == "__main__":
                 if CO2_cost in 'No_CO2_cost':
                     input_parameters['prices']['CO2'] = 0
 
-                for scenario in ['Trade_off']: #['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
+                for scenario in ['BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
                     print('Running {}_{}_{}_{}'.format(year, scenario, price_scenario, CO2_cost))
                     input_data=data[year+'_'+scenario]
                     
