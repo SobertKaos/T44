@@ -156,11 +156,22 @@ class CityModel():
             renovation_data_1_Other = heat_history['2030 Renovation 1 per cent Other']
             renovation_data_15_DH = heat_history['2030 renovation 1.5 per cent DH']
             renovation_data_15_Other = heat_history['2030 renovation 1.5 per cent Other']
+            
+            shallow_renovation_data_1_DH = heat_history['2030 Shallow Renovation 1 per cent DH']
+            shallow_renovation_data_1_Other = heat_history['2030 Shallow Renovation 1 per cent Other']
+            shallow_renovation_data_15_DH = heat_history['2030 Shallow renovation 1.5 per cent DH']
+            shallow_renovation_data_15_Other = heat_history['2030 Shallow renovation 1.5 per cent Other']
+
         else:
             renovation_data_1_DH = heat_history['2050 Renovation 1 per cent DH']
             renovation_data_1_Other = heat_history['2050 Renovation 1 per cent Other']
             renovation_data_15_DH = heat_history['2050 renovation 1.5 per cent DH']
             renovation_data_15_Other = heat_history['2050 renovation 1.5 per cent Other']
+
+            shallow_renovation_data_1_DH = heat_history['2050 Shallow Renovation 1 per cent DH']
+            shallow_renovation_data_1_Other = heat_history['2050 Shallow Renovation 1 per cent Other']
+            shallow_renovation_data_15_DH = heat_history['2050 Shallow renovation 1.5 per cent DH']
+            shallow_renovation_data_15_Other = heat_history['2050 Shallow renovation 1.5 per cent Other']
 
         if not 'Trade_off' in scenario:
             renovation = fs.Node(name = input_data['Renovation']['name'])
@@ -171,10 +182,9 @@ class CityModel():
             parts.add(renovation)
 
         else:
-            
             renovation = fs.Node(name = input_data['Renovation']['name'])
             inv_1 = fs.Variable(name= 'inv_1', domain = fs.Domain.binary)
-            inv_0 = fs.Variable(name= 'inv_0', domain = fs.Domain.binary)
+            #inv_0 = fs.Variable(name= 'inv_0', domain = fs.Domain.binary)
             renovation.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']), 'renovation level': input_data['Renovation']['capacity']}
             renovation.state_variables = lambda t: {}
             renovation.static_variables = {inv_1}#!AK, inv_0}
@@ -182,13 +192,14 @@ class CityModel():
             renovation.consumption[pl.Resources.heat]= lambda t: renovation_data_1_DH[t]*inv_1
             renovation.consumption[pl.Resources.natural_gas] = lambda t: renovation_data_1_Other[t]*inv_1
 
-            renovation.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']) * inv_1 + 0 * inv_0
+            renovation.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']) * inv_1 #+ 0 * inv_0
             renovation.cost = lambda t:0
             parts.add(renovation)
             
+            
             renovation_15 = fs.Node(name = input_data['Renovation_15']['name'])
             inv_15 = fs.Variable(name = 'inv_15', domain = fs.Domain.binary)
-            inv_2 = fs.Variable(name = 'inv_2', domain = fs.Domain.binary)
+            #inv_2 = fs.Variable(name = 'inv_2', domain = fs.Domain.binary)
             renovation_15.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Renovation_15']['lifespan'],input_data['Renovation_15']['investment_cost']), 'renovation level': input_data['Renovation_15']['capacity']}
             renovation_15.state_variables = lambda t: {}
             renovation_15.static_variables ={inv_15}#!AK, inv_2}
@@ -202,6 +213,37 @@ class CityModel():
             
             #renovation_const = fs.Eq(inv_0 + inv_1, 1)
             #renovation_const_2 = fs.Eq(inv_1 + inv_2 + inv_15, 1)
+            
+            # Shallow renovations
+            shallow_inv_1 = fs.Variable(name= 'shallow_inv_1', domain = fs.Domain.binary)
+            shallow_renovation_1 =fs.Node(name = input_data['Shallow_Renovation_1']['name'])
+            shallow_renovation_1.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_1']['lifespan'],input_data['Shallow_Renovation_1']['investment_cost']), 'renovation level': input_data['Shallow_Renovation_1']['capacity']}
+            shallow_renovation_1.state_variables = lambda t: {}
+            shallow_renovation_1.static_variables ={shallow_inv_1}
+            shallow_renovation_1.consumption[pl.Resources.heat]= lambda t: shallow_renovation_data_1_DH[t]*shallow_inv_1
+            shallow_renovation_1.consumption[pl.Resources.natural_gas] = lambda t: shallow_renovation_data_1_Other[t]*shallow_inv_1
+            shallow_renovation_1.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_1']['lifespan'],input_data['Shallow_Renovation_1']['investment_cost']) * shallow_inv_1
+            shallow_renovation_1.cost = lambda t: 0
+            parts.add(shallow_renovation_1)
+
+            shallow_inv_15 = fs.Variable(name= 'shallow_inv_15', domain = fs.Domain.binary)
+            shallow_renovation_15 =fs.Node(name = input_data['Shallow_Renovation_15']['name'])
+            shallow_renovation_15.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_15']['lifespan'],input_data['Shallow_Renovation_15']['investment_cost']), 'renovation level': input_data['Shallow_Renovation_15']['capacity']}
+            shallow_renovation_15.state_variables = lambda t: {}
+            shallow_renovation_15.static_variables ={shallow_inv_15}
+            shallow_renovation_15.consumption[pl.Resources.heat]= lambda t: shallow_renovation_data_15_DH[t]*shallow_inv_15
+            shallow_renovation_15.consumption[pl.Resources.natural_gas] = lambda t: shallow_renovation_data_15_Other[t]*shallow_inv_15
+            shallow_renovation_15.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_15']['lifespan'],input_data['Shallow_Renovation_15']['investment_cost']) * shallow_inv_15
+            shallow_renovation_15.cost = lambda t: 0
+            parts.add(shallow_renovation_15)
+
+            renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
+
+
+
+
+            #shallow_renovation_15 = fs.Node(name = input_data['Shallow_Renovation_15']['Name'])
+
             
         city = fs.Node(name='City')
         city.cost = lambda t: 0
@@ -329,7 +371,7 @@ class CityModel():
         if 'Trade_off_CO2' in scenario:
             timeindependent_constraint = [CO2_maximum] #, renovation_const, renovation_const_2]
         elif 'Trade_off' in scenario:
-            timeindependent_constraint = [] # ,renovation_const, renovation_const_2] #!AK
+            timeindependent_constraint = [renovation_const_1] # ,renovation_const, renovation_const_2] #!AK
         else:
             timeindependent_constraint = []
         
@@ -423,23 +465,26 @@ if __name__ == "__main__":
     data=read_data('C:/Users/AlexanderKa/Desktop/Github/T4-4/input/scenario_data_v2.xlsx')
     scenario_start_time = pd.Timestamp.now()
     print('Beginning scenario loop at {}'.format(scenario_start_time))
-    for price_scenario in ['Italy medium']: #, 'Italy pessimistic', 'SD', 'NP']:
-        for year in ['2030']: #, '2050']:
-            input_parameters=data[year+'_input_parameters']
-            interest_rate = input_parameters['prices']['interest_rate']
-            input_parameters['prices'] = price_scenarios[year][price_scenario]
-            input_parameters['prices']['interest_rate'] = interest_rate
+    for price_scenario in ['Italy medium', 'Italy pessimistic', 'SD', 'NP']:
+        for year in ['2030', '2050']:
+            for CO2_cost in ['CO2_cost', 'No_CO2_cost']:
+                input_parameters=data[year+'_input_parameters']
+                interest_rate = input_parameters['prices']['interest_rate']
+                input_parameters['prices'] = price_scenarios[year][price_scenario]
+                input_parameters['prices']['interest_rate'] = interest_rate
+                if CO2_cost in 'No_CO2_cost':
+                    input_parameters['prices']['CO2'] = 0
 
-            for scenario in ['Trade_off']: #['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
-                print('Running {}_{}_{}'.format(year, scenario, price_scenario))
-                input_data=data[year+'_'+scenario]
-                
-                model = CityModel(input_data, input_parameters, year, scenario)
-                model.RunModel()
-                parameters = model.get_parameters()
-                
-                from process_results import process_results
-                process_results(model, parameters, pl.Resources, year, scenario, price_scenario, input_data)
+                for scenario in ['Trade_off']: #['BAU', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
+                    print('Running {}_{}_{}_{}'.format(year, scenario, price_scenario, CO2_cost))
+                    input_data=data[year+'_'+scenario]
+                    
+                    model = CityModel(input_data, input_parameters, year, scenario)
+                    model.RunModel()
+                    parameters = model.get_parameters()
+                    
+                    from process_results import process_results
+                    process_results(model, parameters, pl.Resources, year, scenario, price_scenario, input_data, CO2_cost)
     
     scenario_end_time = pd.Timestamp.now()
     print('Finished scenario loop at {}, total time elapsed: {}'.format(scenario_end_time, scenario_end_time-scenario_start_time))
