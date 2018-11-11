@@ -56,4 +56,4 @@ class DispatchModel(fs.Part):
         for p in parts:
             if 'static_variables' in dir(p):
                 for v in p.static_variables:
-                    v.take_value(solution) 
+                    v.take_value(solution)

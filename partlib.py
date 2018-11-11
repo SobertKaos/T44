@@ -137,10 +137,10 @@ class LinearCHP(fs.Node):
         with fs.namespace(self):
             F = fs.VariableCollection(lb=0, ub=Fmax, name='F')
             inv = fs.Variable(domain = fs.Domain.binary, name='inv_chp')
-            
+
         self.test={ 'fuel':fuel, 'alpha':alpha, 'eta':eta, 'Fmax':Fmax, 'max_capacity':max_capacity, 'taxation':taxation, 
                     'investment_cost':investment_cost}
-        
+
         self.consumption[fuel] = F
         self.production[Resources.heat] = lambda t: F(t) * eta / (alpha + 1)
         self.production[Resources.power] = lambda t: alpha * F(t) * eta / (alpha + 1)

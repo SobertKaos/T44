@@ -285,7 +285,7 @@ class CityModel():
                 fuel =  input_data['CHP']['resource'],
                 taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
                 investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost']) / (input_data['CHP']['max_capacity'] if 'Trade_off' in scenario else 1),
-                max_capacity =  input_data['CHP']['max_capacity']
+                max_capacity =  input_data['CHP']['max_capacity']/hour
                 )
         )
         
