@@ -5,6 +5,8 @@ import io
 import logging
 import csv
 import pdb
+import winsound
+from read_data import read_data
 import pandas as pd
 import numpy as np
 import friendlysam as fs
@@ -12,6 +14,8 @@ import partlib as pl
 import matplotlib.pyplot as plt
 from models import DispatchModel
 from copy import deepcopy
+from process_results import process_results
+from final_processor import final_processor
 # logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -130,8 +134,7 @@ class CityModel():
         parts = set()
         taxation = make_tax_function(parameters)
         heat_history = self.get_heat_history(parameters['time_unit'])
-        power_demand = self.get_power_demand(parameters['time_unit'])
-        #heat_history_industry = self.get_heat_history_industry(parameters['time_unit'])
+        power_demand = heat_history['Electricity']
         
         for r in pl.Resources:
             if r not in [pl.Resources.heat, pl.Resources.CO2]:
@@ -257,13 +260,13 @@ class CityModel():
         else:
             city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
 
-        print('!! -- INCORRECT POWER DEMAND -- !!')
-        city.consumption[pl.Resources.power] = lambda t: 15 #power_demand['Power demand'][t]
+        city.consumption[pl.Resources.power] =lambda t: power_demand[t]
         parts.add(city) 
 
-        print('!! -- POWER EXPORT WAS DIVIDED BY 10, CHANGED TO 2, WHAT IS CORRECT? -- !!')
+        # Removing taxes according to excel Innsbruck_v3 sheet electricity cotst italy
+        power_export_price = (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1
         powerExport = pl.Export(resource = pl.Resources.power,
-                                price = parameters['prices'][pl.Resources.power]/2,
+                                price =  power_export_price,
                                 name='power export')
         parts.add(powerExport)
         
@@ -457,11 +460,9 @@ price_scenarios = {
     }
 }
 
-
+total_results = dict()
 if __name__ == "__main__":
-    import pdb
-    import winsound
-    from read_data import read_data
+    
     data=read_data('C:/Users/AlexanderKa/Desktop/Github/T4-4/input/scenario_data_v2.xlsx')
     scenario_start_time = pd.Timestamp.now()
     print('Beginning scenario loop at {}'.format(scenario_start_time))
@@ -483,10 +484,17 @@ if __name__ == "__main__":
                     model.RunModel()
                     parameters = model.get_parameters()
                     
-                    from process_results import process_results
-                    process_results(model, parameters, pl.Resources, year, scenario, price_scenario, input_data, CO2_cost)
+                    
+                    results = process_results(model, parameters, pl.Resources, year, scenario, price_scenario, input_data, CO2_cost)
+                    scenario_name = year+"_"+scenario+"_"+price_scenario+"_"+CO2_cost
+                    total_results[scenario_name] = results
     
     scenario_end_time = pd.Timestamp.now()
     print('Finished scenario loop at {}, total time elapsed: {}'.format(scenario_end_time, scenario_end_time-scenario_start_time))
+    
+    
+    final_results = final_processor(total_results,
+                                    output_path = "C:/Users\AlexanderKa/Desktop/Github/T4-4/output/total/",
+                                    base_case = "2030_BAU_Italy medium_CO2_cost")
     winsound.PlaySound("*", winsound.SND_ALIAS)
     

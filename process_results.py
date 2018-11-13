@@ -27,6 +27,7 @@ def process_results(model, parameters, Resources, year, scenario, price_scenario
     'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power_production':power_production, 'power_consumers': power_consumers,
     'import resources': import_resources, 'prices': prices}
     save_results_excel(m, parameters, year, scenario, price_scenario, total, 'C:/Users/AlexanderKa/Desktop/Github/T4-4/output/', CO2_cost)
+    return total
 
 def get_investment_data(parts, scenario):
     """Gather the input data for the investment options in the model and returns it as a dictionary"""
