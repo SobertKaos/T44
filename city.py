@@ -249,7 +249,7 @@ class CityModel():
 
             
         city = fs.Node(name='City')
-        city.cost = lambda t: 0
+        
         city.state_variables = lambda t: {}
 
         if scenario in 'Max_DH':
@@ -261,6 +261,7 @@ class CityModel():
             city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
 
         city.consumption[pl.Resources.power] =lambda t: power_demand[t]
+        city.cost = lambda t: power_demand[t] * parameters['prices'][pl.Resources.power]
         parts.add(city) 
 
         # Removing taxes according to excel Innsbruck_v3 sheet electricity cotst italy
@@ -298,7 +299,7 @@ class CityModel():
         CHP_B =pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, Fmax= 4.27 /hour, fuel=pl.Resources.natural_gas, taxation=taxation)
         # Fmin= 2.33 / hour, start_steps=int(np.round(.5 * hour)),
         parts.add(CHP_B) 
-
+    
         parts.add(pl.Boiler(name='Existing Boiler A', eta=0.9, Fmax=8.84 / hour, fuel=pl.Resources.natural_gas, taxation=taxation))
 
         parts.add(pl.Boiler(name='Existing Boiler B',eta=0.87, Fmax=8.84 / hour, fuel=pl.Resources.natural_gas, taxation=taxation))
@@ -320,7 +321,6 @@ class CityModel():
         """ Production alternatives for the scenarios"""
         
         solar_data=self.get_solar_data(parameters['time_unit'])
-
         parts.add(
             pl.LinearCHP(
                 name = input_data['CHP']['name'],
@@ -329,7 +329,7 @@ class CityModel():
                 Fmax = input_data['CHP']['capacity'] /hour,
                 fuel =  input_data['CHP']['resource'],
                 taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
-                investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost']) / (input_data['CHP']['max_capacity'] if 'Trade_off' in scenario else 1),
+                investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost']),
                 max_capacity =  input_data['CHP']['max_capacity']/hour if input_data['CHP']['max_capacity'] else input_data['CHP']['max_capacity']
                 )
         )
@@ -470,7 +470,7 @@ if __name__ == "__main__":
         for year in ['2030', '2050']:
             for CO2_cost in ['CO2_cost', 'No_CO2_cost']:
                 input_parameters=data[year+'_input_parameters']
-                interest_rate = input_parameters['prices']['interest_rate']
+                interest_rate = 0.028 #input_parameters['prices']['interest_rate']
                 input_parameters['prices'] = price_scenarios[year][price_scenario]
                 input_parameters['prices']['interest_rate'] = interest_rate
                 if CO2_cost in 'No_CO2_cost':
@@ -488,6 +488,7 @@ if __name__ == "__main__":
                     results = process_results(model, parameters, pl.Resources, year, scenario, price_scenario, input_data, CO2_cost)
                     scenario_name = year+"_"+scenario+"_"+price_scenario+"_"+CO2_cost
                     total_results[scenario_name] = results
+                    total_results[scenario_name]['interest rate'] = interest_rate
     
     scenario_end_time = pd.Timestamp.now()
     print('Finished scenario loop at {}, total time elapsed: {}'.format(scenario_end_time, scenario_end_time-scenario_start_time))
@@ -495,6 +496,6 @@ if __name__ == "__main__":
     
     final_results = final_processor(total_results,
                                     output_path = "C:/Users\AlexanderKa/Desktop/Github/T4-4/output/total/",
-                                    base_case = "2030_BAU_Italy medium_CO2_cost")
+                                    base_case = '2030_BAU_Italy medium_No_CO2_cost')
     winsound.PlaySound("*", winsound.SND_ALIAS)
     
