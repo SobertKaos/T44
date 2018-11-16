@@ -119,6 +119,16 @@ class CityModel():
                 else:
                     model.add_part(p)
             model.add_part(cluster)
+        power_export_price = (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1
+        solar_pv_export = pl.Export(name='Solar PV power export', resource=pl.Resources.power, capacity=None, price=power_export_price)
+
+        solar_pv_connection = fs.parts.FlowNetwork(pl.Resources.power, name='Solar PV export')
+        solar_pv_connection.cost = lambda t: 0
+        for p in parts:
+            if isinstance(p, pl.SolarPV):
+                solar_pv_connection.connect(p, solar_pv_export)
+        model.add_part(solar_pv_export)
+        model.add_part(solar_pv_connection)
 
         for p in model.descendants_and_self:
             p.time_unit = parameters['time_unit']
@@ -261,13 +271,13 @@ class CityModel():
             city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
 
         city.consumption[pl.Resources.power] =lambda t: power_demand[t]
-        city.cost = lambda t: power_demand[t] * parameters['prices'][pl.Resources.power]
+        city.cost = lambda t: float(power_demand[t] * parameters['prices'][pl.Resources.power])
         parts.add(city) 
 
         # Removing taxes according to excel Innsbruck_v3 sheet electricity cotst italy
         power_export_price = (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1
         powerExport = pl.Export(resource = pl.Resources.power,
-                                price =  power_export_price,
+                                price =  0, #power_export_price,
                                 name='power export')
         parts.add(powerExport)
         
@@ -292,11 +302,11 @@ class CityModel():
         heating.state_variables = lambda t: {}
         parts.add(heating)
 
-        CHP_A = pl.LinearCHP(name='Existing CHP A', eta=0.776, alpha=0.98, Fmax= 4.27 / hour, fuel=pl.Resources.natural_gas, taxation=taxation)
+        CHP_A = pl.LinearCHP(name='Existing CHP A', eta=0.776, alpha=0.98, Fmax= 4.27 / hour, fuel=pl.Resources.natural_gas, taxation=taxation, running_cost = power_export_price)
         # Fmin= 2.33 / hour, start_steps=int(np.round(.5 * hour)), 
         parts.add(CHP_A)        
 
-        CHP_B =pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, Fmax= 4.27 /hour, fuel=pl.Resources.natural_gas, taxation=taxation)
+        CHP_B =pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, Fmax= 4.27 /hour, fuel=pl.Resources.natural_gas, taxation=taxation, running_cost = power_export_price)
         # Fmin= 2.33 / hour, start_steps=int(np.round(.5 * hour)),
         parts.add(CHP_B) 
     
@@ -311,7 +321,7 @@ class CityModel():
 
         # Running waste incinerator at 25 MW output max according to D4.2 p 32, techincal limit is 45
         parts.add(
-            pl.LinearCHP(name='Existing Waste Incinerator', fuel=pl.Resources.waste, alpha=0.46, eta=0.81, Fmax= 25/hour, taxation=taxation)
+            pl.LinearCHP(name='Existing Waste Incinerator', fuel=pl.Resources.waste, alpha=0.46, eta=0.81, Fmax= 25/hour, taxation=taxation, running_cost = power_export_price)
             )  
         
         parts.add(
@@ -330,7 +340,8 @@ class CityModel():
                 fuel =  input_data['CHP']['resource'],
                 taxation = input_data['CHP']['taxation'],  #ska vara taxation här men fick inte rätt då
                 investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP']['lifespan'], input_data['CHP']['investment_cost']),
-                max_capacity =  input_data['CHP']['max_capacity']/hour if input_data['CHP']['max_capacity'] else input_data['CHP']['max_capacity']
+                max_capacity =  input_data['CHP']['max_capacity']/hour if input_data['CHP']['max_capacity'] else input_data['CHP']['max_capacity'],
+                running_cost = power_export_price
                 )
         )
         
@@ -345,7 +356,8 @@ class CityModel():
                     max_capacity = input_data['CHP invest']['max_capacity']/hour,
                     fuel =  input_data['CHP invest']['resource'],
                     taxation = input_data['CHP invest']['taxation'],  #ska vara taxation här men fick inte rätt då
-                    investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP invest']['lifespan'], input_data['CHP invest']['investment_cost'])))
+                    investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP invest']['lifespan'], input_data['CHP invest']['investment_cost']),
+                    running_cost = power_export_price))
         
         parts.add(
             pl.SolarPV(
@@ -355,7 +367,8 @@ class CityModel():
                 max_capacity = None if input_data['SolarPV']['max_capacity'] is None else float(input_data['SolarPV']['max_capacity']),
                 capacity = input_data['SolarPV']['capacity']/hour, #Eller capacity borde väl inte anges för investment option
                 taxation = input_data['SolarPV']['taxation'], 
-                investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost'])))
+                investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost']),
+                running_cost = power_export_price))
         
         if '2050' in year:
             parts.add(
