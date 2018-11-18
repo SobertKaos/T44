@@ -135,6 +135,96 @@ class CityModel():
   
         return model
 
+    def make_parts_2(self, parameters):
+        """
+        parameters = {
+            't_start': Timestamp('2016-01-01 00:00:00'),
+            't_end': Timestamp('2016-12-30 00:00:00'),
+            'time_unit': Timedelta('7 days 00:00:00'),
+            'prices': {
+                Resource1: price,
+                Resource2: price},
+            'CO2_factor': {
+                Resource1: CO2_fac,
+                Resource2: CO2_fac},
+            'interest_rate': 0.028
+            }
+        """
+
+        """ Get all time series needed """
+        district_heating_demand = 
+        other_heating_demand =
+        power_demand = 
+        solar_irradiation =
+        prices =
+        renovation = 
+        grid_expansion_heating = 
+        #renovation[2030]['Deep']['1.5 percent']['DH']
+
+
+        """ Construct parts """
+        
+        """ Scaffolding """
+        parts = set()
+        for r in [pl.Resources.biomass, , pl.Resources.natural_gas, pl.Resources.power, pl.Resources.waste]:
+            parts.add(
+                    pl.Import(
+                        resource=r,
+                        price=parameters['prices'][r],
+                        name='Import({})'.format(r),
+                        CO2_factor=parameters['CO2_factor'][r]
+                        )
+                    )
+
+        inv = {
+            2030: {
+                'Deep' {
+                    '1 percent': fs.Variable(name = 'investment 2030 1 percent deep', domain=fs.Domain.binary), 
+                    '1.5 percent': fs.Variable(name = 'investment 2030 1.5 percent deep', domain=fs.Domain.binary)
+                }
+                'Shallow': {
+                    '1 percent': fs.Variable(name = 'investment 2030 1 percent shallow', domain=fs.Domain.binary), 
+                    '1.5 percent': fs.Variable(name = 'investment 2030 1.5 percent shallow', domain=fs.Domain.binary)
+                }
+            },
+            2050: {
+                'Deep' {
+                    '1 percent': fs.Variable(name = 'investment 2050 1 percent deep', domain=fs.Domain.binary), 
+                    '1.5 percent': fs.Variable(name = 'investment 2050 1.5 percent deep', domain=fs.Domain.binary)
+                }
+                'Shallow': {
+                    '1 percent': fs.Variable(name = 'investment 2050 1 percent shallow', domain=fs.Domain.binary), 
+                    '1.5 percent': fs.Variable(name = 'investment 2050 1.5 percent shallow', domain=fs.Domain.binary)
+                }
+            }
+        }
+            
+            [2030]['Deep']['1.5 percent']
+        """ Base case """
+        # City
+        home_boiler_eta = 0.8/0.95
+        city = fs.Node(name='City')
+        city.state_variables= lambda t: {}
+        city.consumption[pl.Resources.heat] = lambda t: base_district_heating_demand[t] +\
+                                              renovation[2030]['Deep']['1 percent']['DH'][t] * inv[2030]['Deep']['1 percent'] + \
+                                              renovation[2030]['Shallow']['1 percent']['DH'][t] * inv[2030]['Deep']['1 percent'] + \
+                                              renovation[2030]['Deep']['1.5 percent']['DH'][t] * inv[2030]['Deep']['1.5 percent'] + \
+                                              renovation[2030]['Shallow']['1.5 percent']['DH'][t] * inv[2030]['Deep']['1.5 percent'] + \
+                                              grid_expansion_heating[2030][t] * inv[2030]['grid expansion']
+                                              grid_expansion_heating[2050][t] * inv[2050]['grid expansion']
+        city.consumption[pl.Resources.natural_gas] = lambda t: (1/home_boiler_eta) * (other_heating_demand[t] +\
+                                                    renovation[2030]['Deep']['1 percent']['Other'][t] * inv[2030]['Deep']['1 percent'] + \
+                                                    renovation[2030]['Shallow']['1 percent']['Other'][t] * inv[2030]['Deep']['1 percent'] + \
+                                                    renovation[2030]['Deep']['1.5 percent']['Other'][t] * inv[2030]['Deep']['1.5 percent'] + \
+                                                    renovation[2030]['Shallow']['1.5 percent']['Other'][t] * inv[2030]['Deep']['1.5 percent'] + \
+                                                    -grid_expansion_heating[2030][t] * inv[2030]['grid expansion']
+                                                    -grid_expansion_heating[2050][t] * inv[2050]['grid expansion'])
+        city.consumption[pl.Resources.power] = lambda t: power_demand[t]
+        city.cost = lambda t: power_demand[t] * parameters['prices'][pl.Resources.power]
+
+
+        """ Alternatives """
+
     def make_parts(self, parameters):
         def make_tax_function(*args, **kwargs):
             def tax_function(*args, **kwargs):
