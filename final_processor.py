@@ -130,8 +130,8 @@ def get_year_and_scenario(case_name):
     return year, scenario
 
 def get_co2_cost_efficiency(base_case_total_costs, base_case_total_CO2, total_costs, total_CO2):
-    delta_co2 = total_CO2 - base_case_total_CO2
-    delta_cost = total_costs - base_case_total_costs
+    delta_co2 = float(total_CO2 - base_case_total_CO2)
+    delta_cost = float(total_costs - base_case_total_costs)
     try:
         cost_efficiency = delta_co2/delta_cost
     except ZeroDivisionError:
@@ -157,6 +157,8 @@ def final_processor(total_results, output_path = None, base_case = None):
                  + PEF_natural_gas * result['import resources']['natural gas import']
         
         """ Get investment cost """
+        investment_costs = result['total cost and emissions']['investment cost [EUR/year]']
+        """
         if 'trade off' in case_name.lower():
             investment_costs = result['total cost and emissions']['investment cost [EUR/year]']
         else:
@@ -180,6 +182,7 @@ def final_processor(total_results, output_path = None, base_case = None):
         if 'max dh' in case_name.lower():
             yearly_dh_grid_extension_cost = {2030: 0, 2050: 0}
             investment_costs += yearly_dh_grid_extension_cost[year]
+        """
         total_costs = investment_costs + running_costs
         cost_efficiency = get_co2_cost_efficiency(base_total_costs, base_CO2, total_costs, total_CO2)
 

@@ -3,6 +3,7 @@ import pandas as pd
 import friendlysam as fs
 import partlib as pl
 import pdb
+from itertools import chain, product
 
 def process_results(model, parameters, Resources, year, scenario, price_scenario, data, CO2_cost):
 
@@ -126,6 +127,16 @@ def get_total_results(m, parameters, parts, Resources, scenario):
     
     """Each scenario includes investments that is fixed by the scenario except for the trade off scenarios where the
     model optimize for total cost of the system."""
+    for part in parts:
+        if hasattr(part, 'investment_cost'):
+            try:
+                part_investment_cost = part.investment_cost.value
+            except AttributeError:
+                part_investment_cost = part.investment_cost
+            investment_cost[part.name] = part_investment_cost
+            investment_cost_tot += part_investment_cost
+                
+    """
     if 'Trade_off' in scenario:
         for part in parts:
             if 'static_variables' in dir(part):
@@ -154,18 +165,24 @@ def get_total_results(m, parameters, parts, Resources, scenario):
             if hasattr(part, 'investment_cost'):
                 if not 'Existing' in part.name:
                     investment_cost_tot += part.investment_cost
-    
+    """
     """Running cost for the system, in this case it only includes fuel cost"""
-    from itertools import chain, product
+    
     cost = {}
+    cost_tot=0
+
     for p in parts:
         cost[p.name] = 0
     
-    cost_tot=0
+    
     for part, t in product(parts, m.times_between(parameters['t_start'],parameters['t_end'])):
         if part.cost(t):
-            cost[part.name] +=part.cost(t).value
-            cost_tot += part.cost(t).value
+            try:
+                cost[part.name] +=part.cost(t).value
+                cost_tot += part.cost(t).value
+            except AttributeError:
+                cost[part.name] += part.cost(t)
+                cost_tot += part.cost(t)
     
     """The CO2 emissions from the system"""
     for part in parts:
