@@ -144,7 +144,7 @@ class LinearCHP(fs.Node):
         self.consumption[fuel] = F
         self.production[Resources.heat] = lambda t: F(t) * eta / (alpha + 1)
         self.production[Resources.power] = lambda t: alpha * F(t) * eta / (alpha + 1)
-        self.cost = lambda t: -(alpha * F(t) * eta / (alpha + 1)) * running_cost  #_CHP_cost_func(self, taxation, fuel)
+        self.cost = lambda t: F(t) * running_cost  #_CHP_cost_func(self, taxation, fuel)
 
         self.state_variables = lambda t: {F(t)}
         self.inv = inv
@@ -286,22 +286,23 @@ class SolarPV(fs.Node):
             self.investment_cost = PV_cap * investment_cost
             self.static_variables =  {PV_cap}
         else: 
-            self.PV_cap = capacity         
+            PV_cap = capacity
+            self.PV_cap = PV_cap         
         def prod(t):
             if G[t] == 0:
-                prod = self.PV_cap * 0  
+                prod = PV_cap * 0  
             else: 
                 G_c = abs(G[t]/(Gstc))
                 T_c = (T[t] + coef_temp_PV * G[t]) -Tstc
                 # Factor is W/installed W_peak, from: Norwood, Z., Nyholm, E., Otanicar, T. and Johnsson, F., 2014 . 
                 # A geospatial comparison of distributed solar heat and power in Europe and the US . PloS one, 9(12), p.e112442
                 factor = (G_c*(1 + c1*math.log10(G_c) + c2*(math.log10(G_c))**2 + c3*T_c + c4*T_c*math.log10(G_c) + c5*T_c*(math.log10(G_c))**2 + c6*(T_c)**2))
-                prod = self.PV_cap* factor
+                prod = PV_cap* factor
                 
             return prod
 
-        self.production[Resources.power] =lambda t: prod(t)
         self.cost = lambda t: 0
+        self.production[Resources.power] =lambda t: prod(t)
         self.state_variables = lambda t: {}
 
 class PipeLoss(fs.Node):

@@ -164,13 +164,8 @@ def get_total_results(m, parameters, parts, Resources, scenario):
     cost_tot=0
     for part, t in product(parts, m.times_between(parameters['t_start'],parameters['t_end'])):
         if part.cost(t):
-            try:
-                cost[part.name] +=part.cost(t).value
-                cost_tot += part.cost(t).value
-            except AttributeError:
-                cost[part.name] += part.cost(t)
-                cost_tot += part.cost(t)
-
+            cost[part.name] +=part.cost(t).value
+            cost_tot += part.cost(t).value
     
     """The CO2 emissions from the system"""
     for part in parts:
