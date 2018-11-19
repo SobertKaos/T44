@@ -114,21 +114,12 @@ class CityModel():
             cluster = fs.Cluster(resource=r, name='{} cluster'.format(r))
             cluster.cost = lambda t: 0
             for p in parts:
-                if not isinstance(p, fs.parts.FlowNetwork) and (r in p.resources):
+                if not isinstance(p, fs.parts.FlowNetwork) and (r in p.resources) and not isinstance(p, pl.SolarPV) and not p.name.lower() in "solar pv power export":
                     cluster.add_part(p)
                 else:
                     model.add_part(p)
             model.add_part(cluster)
-        power_export_price = (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1
-        solar_pv_export = pl.Export(name='Solar PV power export', resource=pl.Resources.power, capacity=None, price=power_export_price)
 
-        solar_pv_connection = fs.parts.FlowNetwork(pl.Resources.power, name='Solar PV export')
-        solar_pv_connection.cost = lambda t: 0
-        for p in parts:
-            if isinstance(p, pl.SolarPV):
-                solar_pv_connection.connect(p, solar_pv_export)
-        model.add_part(solar_pv_export)
-        model.add_part(solar_pv_connection)
 
         for p in model.descendants_and_self:
             p.time_unit = parameters['time_unit']
@@ -291,13 +282,13 @@ class CityModel():
         times = CO2.times_between(parameters['t_start'], parameters['t_end'])
         emissions = fs.Sum(CO2.consumption[pl.Resources.CO2](t) for t in times)
         CO2_maximum = fs.LessEqual(emissions, 100000000000) #below 24 069 146 limit the CO2 emissions
-        
+        print('!! -- OTHER HEATING CONSUMPTION OF NG AND POWER ISNT CORRECT - CHECK WITH RENOVATION AS WELL -- !!')
         heating = fs.Node(name='Heating') #se till att heat_history['Other'] minskar när DH byggs ut och blir större
         if self.scenario in 'Max DH':
             heating.consumption[pl.Resources.natural_gas] = lambda t: (heat_history['Other heating'][t]- heat_history['{} DH expansion'.format(self.year)][t])*0.8/0.95 #verkningsgrad gasuppvärmning
         else:
             heating.consumption[pl.Resources.natural_gas] = lambda t: (heat_history['Other heating'][t])*0.8/0.95 #verkningsgrad gasuppvärmning
-        heating.consumption[pl.Resources.power] = lambda t: 10 #heat_history['Other'][t]*0.2/0.97  #verkningsgrad eluppvärmning
+        heating.consumption[pl.Resources.power] = lambda t: heat_history['Other heating'][t]*0.2/0.97  #verkningsgrad eluppvärmning
         heating.cost = lambda t: 0
         heating.state_variables = lambda t: {}
         parts.add(heating)
@@ -359,8 +350,7 @@ class CityModel():
                     investment_cost = self.annuity(parameters['interest_rate'], input_data['CHP invest']['lifespan'], input_data['CHP invest']['investment_cost']),
                     running_cost = power_export_price))
         
-        parts.add(
-            pl.SolarPV(
+        solar_PV = pl.SolarPV(
                 name = input_data['SolarPV']['name'],
                 G = solar_data['Mean Irradiance [W/m2]'],
                 T = solar_data['Mean temperature [C]'], 
@@ -368,7 +358,24 @@ class CityModel():
                 capacity = input_data['SolarPV']['capacity']/hour, #Eller capacity borde väl inte anges för investment option
                 taxation = input_data['SolarPV']['taxation'], 
                 investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost']),
-                running_cost = power_export_price))
+                running_cost = power_export_price)
+        #parts.add(solar_PV)
+
+
+        power_export_price = (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1
+        solar_pv_export = pl.Export(name='Solar PV power export', resource=pl.Resources.power, capacity=None, price=power_export_price)
+        #parts.add(solar_pv_export)
+
+        solar_pv_city_connection = fs.parts.FlowNetwork(pl.Resources.power, name='Solar PV city connection')
+        solar_pv_city_connection.cost = lambda t: 0
+        solar_pv_city_connection.connect(solar_PV, city)
+        #parts.add(solar_pv_city_connection)
+
+        solar_pv_export_connection = fs.parts.FlowNetwork(pl.Resources.power, name='Solar PV export')
+        solar_pv_export_connection.cost = lambda t: 0
+        solar_pv_export_connection.connect(solar_PV, solar_pv_export)
+        #parts.add(solar_pv_export_connection)
+
         
         if '2050' in year:
             parts.add(

@@ -301,7 +301,7 @@ class SolarPV(fs.Node):
             return prod
 
         self.production[Resources.power] =lambda t: prod(t)
-        self.cost = lambda t: 0
+        self.cost = lambda t: 0#-prod(t) * running_cost * 
         self.state_variables = lambda t: {}
 
 class PipeLoss(fs.Node):
