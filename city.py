@@ -168,32 +168,16 @@ class CityModel():
         shallow_renovation_data_15_DH = heat_history['{} Shallow renovation 1.5 per cent DH'.format(year)]
         shallow_renovation_data_15_Other = heat_history['{} Shallow renovation 1.5 per cent Other'.format(year)]
 
-        inv_1 = fs.Variable( name= '1 per cent deep renovation', domain = fs.Domain.binary)
-        inv_1_lb = fs.LessEqual(investment_option_dict[year][scenario]['1 per cent deep']['capacity lb'], inv_1)
-        inv_1_ub = fs.LessEqual(inv_1, investment_option_dict[year][scenario]['1 per cent deep']['capacity lb'])
-
-        inv_15 = fs.Variable( name = '1.5 per cent deep renovation', domain = fs.Domain.binary)
-        inv_15_lb = fs.LessEqual(investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'], inv_15)
-        inv_15_ub = fs.LessEqual(inv_15, investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'])
-
-        shallow_inv_1 = fs.Variable(name= '1 per cent shallow renovation', domain = fs.Domain.binary)
-        shallow_inv_1_lb = fs.LessEqual(investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'], shallow_inv_1)
-        shallow_inv_1_ub = fs.LessEqual(shallow_inv_1, investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'])
-
-        shallow_inv_15 = fs.Variable(name= '1.5 per cent shallow renovation', domain = fs.Domain.binary)
-
-        shallow_inv_15_lb = fs.LessEqual(investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'], shallow_inv_15)
-        shallow_inv_15_ub = fs.LessEqual(shallow_inv_15, investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'])
-        
-
+        inv_1 = fs.Variable(name= '1 per cent deep renovation', lb = investment_option_dict[year][scenario]['1 per cent deep']['capacity lb'], ub = investment_option_dict[year][scenario]['1 per cent deep']['capacity ub'], domain = fs.Domain.binary)
+        inv_15 =fs.Variable( name = '1.5 per cent deep renovation', lb = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'], ub = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity ub'], domain = fs.Domain.binary)
+        shallow_inv_1 = fs.Variable(name= '1 per cent shallow renovation', lb = investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'], ub = investment_option_dict[year][scenario]['1 per cent shallow']['capacity ub'], domain = fs.Domain.binary)
+        shallow_inv_15 = fs.Variable(name= '1.5 per cent shallow renovation', lb = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'], ub = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity ub'], domain = fs.Domain.binary)
         
         
-        deep_1_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1 per cent deep']['specific investment cost'])
-        deep_15_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1.5 per cent deep']['specific investment cost'])
-        shallow_1_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1 per cent shallow']['specific investment cost'])
-        shallow_15_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1.5 per cent shallow']['specific investment cost'])
-
-        renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
+        deep_1_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1 per cent deep']['specific investment cost'])
+        deep_15_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1.5 per cent deep']['specific investment cost'])
+        shallow_1_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1 per cent shallow']['specific investment cost'])
+        shallow_15_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1.5 per cent shallow']['specific investment cost'])
 
         renovation_non_dh_heating = lambda t: shallow_renovation_data_1_Other[t] * shallow_inv_1 \
                                             + shallow_renovation_data_15_Other[t] * shallow_inv_15 \
@@ -248,7 +232,7 @@ class CityModel():
 
         """ Production Units """
         parts.add(pl.LinearCHP(name='Existing CHP A', eta=0.776, alpha=0.98, capacity_lb= 4.27, capacity_ub = 4.27 , fuel=pl.Resources.natural_gas, running_cost = -power_export_price, hour = hour))
-        parts.add(pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, capacity_lb= 4.27 / hour, capacity_ub = 4.27 / hour, fuel=pl.Resources.natural_gas, running_cost = -power_export_price, hour = hour))
+        parts.add(pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, capacity_lb= 4.27, capacity_ub = 4.27, fuel=pl.Resources.natural_gas, running_cost = -power_export_price, hour = hour))
     
         parts.add(pl.Boiler(name='Existing Boiler A', eta=0.9, Fmax=8.84, fuel=pl.Resources.natural_gas, hour = hour))
         parts.add(pl.Boiler(name='Existing Boiler B',eta=0.87, Fmax=8.84, fuel=pl.Resources.natural_gas, hour = hour))
@@ -256,7 +240,7 @@ class CityModel():
         parts.add(pl.Boiler(name='Existing Boiler D', eta= 0.77, Fmax= 8.84, fuel=pl.Resources.natural_gas, hour = hour))
 
         # Running waste incinerator at 25 MW output max according to D4.2 p 32, techincal limit is 45
-        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 25, capacity_ub= 45, fuel=pl.Resources.waste, running_cost = -power_export_price, hour = hour))  
+        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 45, capacity_ub= 45, fuel=pl.Resources.waste, running_cost = -power_export_price, hour = hour))  
         
         parts.add(pl.Accumulator(name='Existing Accumulator', resource=pl.Resources.heat, max_flow=60, capacity_lb= 220, capacity_ub= 220, loss_factor = 0.005, t_start = parameters['t_start'], t_end = parameters['t_end'], hour = hour))
         
@@ -319,11 +303,14 @@ class CityModel():
         )  
     
         timeindependent_constraint = []
-        
+        renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
+        minimum_renovation = fs.Eq(1, inv_1+inv_15+shallow_inv_1+shallow_inv_15)
         if 'Trade_off' in scenario:
-            timeindependent_constraint = [renovation_const_1, inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub]
-        else:
-            timeindependent_constraint = [inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub]
+            timeindependent_constraint = [minimum_renovation]
+            #renovation_const_1
+            #timeindependent_constraint = [inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub] 
+        #else:
+            #timeindependent_constraint = [inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub]
         
         return parts, timeindependent_constraint
         
