@@ -135,6 +135,14 @@ def get_total_results(m, parameters, parts, Resources, scenario):
                 part_investment_cost = part.investment_cost
             investment_cost[part.name] = part_investment_cost
             investment_cost_tot += part_investment_cost
+        if not 'existing' in part.name.lower():
+            if hasattr(part, 'static_variables'):
+                variables = set()
+                for v in part.static_variables:
+                    if v.value > 0:
+                        static_variables[v.name]=v.value
+                    #variables.add('{}: {}'.format(v.name, v.value))
+                #static_variables[part.name]=variables
                 
     """
     if 'Trade_off' in scenario:

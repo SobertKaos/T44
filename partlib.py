@@ -24,7 +24,7 @@ class Resources(Enum):
 class Boiler(fs.Node):
     """docstring for Boiler"""
 
-    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=0, **kwargs):
+    def __init__(self, fuel=None, taxation=None, Fmax=None, eta=None, running_cost=0, hour = 1, **kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
@@ -33,8 +33,8 @@ class Boiler(fs.Node):
         self.test = {'Fmax':Fmax, 'eta': eta,
                     'running_cost' : running_cost}
 
-        self.consumption[fuel] = F
-        self.production[Resources.heat] = lambda t: eta * F(t)
+        self.consumption[fuel] = lambda t: F(t) / hour
+        self.production[Resources.heat] = lambda t: eta * F(t) / hour
         self.cost = lambda t: self.consumption[fuel](t) * running_cost
 
         self.state_variables = lambda t: {F(t)}
@@ -43,7 +43,7 @@ class Boiler(fs.Node):
 
 class Accumulator(fs.Node):
     def __init__(self, resource=None, max_flow=0, loss_factor=0, t_start = '2016-01-01', t_end='2016-01-02',
-                 specific_investment_cost=0, running_cost=0, capacity_lb=0, capacity_ub = None, **kwargs):
+                 specific_investment_cost=0, running_cost=0, capacity_lb=0, capacity_ub = None, hour = 1, **kwargs):
         super().__init__(**kwargs)
         with fs.namespace(self):
             volume = fs.VariableCollection(lb=0, ub=None, name='Accumulator energy volume')
@@ -55,7 +55,7 @@ class Accumulator(fs.Node):
         self.t_start=t_start
         self.t_end=t_end
         self.resource = resource
-        self.max_flow = max_flow
+        self.max_flow = max_flow / hour
         self.volume = volume
         self.cost = lambda t: 0
         self.investment_cost = capacity * specific_investment_cost
@@ -87,7 +87,7 @@ class LinearCHP(fs.Node):
     """docstring for LinearCHP"""
 
     def __init__(self, fuel=None, alpha=None, eta=None, taxation=None, 
-                specific_investment_cost=0, running_cost=0, capacity_lb=0, capacity_ub = None, **kwargs):        
+                specific_investment_cost=0, running_cost=0, capacity_lb=0, capacity_ub = None, hour= 1, **kwargs):        
         super().__init__(**kwargs)
         
         with fs.namespace(self):
@@ -97,10 +97,10 @@ class LinearCHP(fs.Node):
         self.test={ 'fuel':fuel, 'alpha':alpha, 'eta':eta, 'taxation':taxation, 
                     'investment_cost':specific_investment_cost}
 
-        self.consumption[fuel] = F
-        self.production[Resources.heat] = lambda t: F(t) * eta / (alpha + 1)
-        self.production[Resources.power] = lambda t: alpha * F(t) * eta / (alpha + 1)
-        self.cost = lambda t: F(t) * running_cost
+        self.consumption[fuel] = lambda t:  F(t)/hour
+        self.production[Resources.heat] = lambda t: (F(t) * eta / (alpha + 1)) /hour
+        self.production[Resources.power] = lambda t: (alpha * F(t) * eta / (alpha + 1)) /hour
+        self.cost = lambda t: self.production[Resources.power](t) * running_cost
         self.investment_cost = capacity * specific_investment_cost
 
         self.state_variables = lambda t: {F(t)}
@@ -110,7 +110,7 @@ class LinearCHP(fs.Node):
 
 class SolarPV(fs.Node):
     def __init__(self, G=None, T=None, taxation=None, specific_investment_cost=0, running_cost=0,
-                 capacity_lb=0, capacity_ub = None,  **kwargs):        
+                 capacity_lb=0, capacity_ub = None, hour= 1,  **kwargs):        
         super().__init__(**kwargs)
 
         self.G = G
@@ -123,13 +123,13 @@ class SolarPV(fs.Node):
             capacity = fs.Variable(lb = capacity_lb, ub = capacity_ub, name='PV capacity')
 
         
-        self.cost = lambda t: 0            
+        self.cost = lambda t: running_cost * self.production[Resources.power](t)            
         self.investment_cost = capacity * specific_investment_cost
                 
         self.state_variables = lambda t: {} 
         self.static_variables =  {capacity}
         
-        self.production[Resources.power] =lambda t: prod(t) * capacity
+        self.production[Resources.power] =lambda t: prod(t) * capacity / hour
         
         def prod(t):
             c1 = -0.0177162

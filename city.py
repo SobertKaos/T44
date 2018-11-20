@@ -109,6 +109,18 @@ class CityModel():
                               t_end=parameters['t_end'],
                               time_unit=parameters['time_unit'],#) #,
                               timeindependent_constraint = timeindependent_constraint)
+        """
+        pv_export_pipe = fs.FlowNetwork(resource= pl.Resources.power, name = 'PV export pipe')
+        parts.add(pv_export_pipe)
+        pv_city_pipe = fs.FlowNetwork(resource= pl.Resources.power, name = 'PV city pipe')
+        parts.add(pv_city_pipe)
+        """
+        """
+        pv_power_export = pl.Export(resource = pl.Resources.power,
+                                    price = power_export_price,
+                                    name = 'PV Power export'
+                                    """
+        """ PV_power_export <--< PV >--> city """
 
         for r in pl.Resources:
             cluster = fs.Cluster(resource=r, name='{} cluster'.format(r))
@@ -132,6 +144,7 @@ class CityModel():
         heat_history = self.get_heat_history(parameters['time_unit'])
         power_demand = heat_history['Electricity']
         hour = pd.Timedelta('1h') / parameters['time_unit']
+        power_export_price = (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1
 
         for r in pl.Resources:
             if r not in [pl.Resources.heat, pl.Resources.CO2]:
@@ -155,20 +168,30 @@ class CityModel():
         shallow_renovation_data_15_DH = heat_history['{} Shallow renovation 1.5 per cent DH'.format(year)]
         shallow_renovation_data_15_Other = heat_history['{} Shallow renovation 1.5 per cent Other'.format(year)]
 
-        inv_1 = fs.Variable(lb = investment_option_dict[year][scenario]['1 per cent deep']['capacity lb'],
-                                ub = investment_option_dict[year][scenario]['1 per cent deep']['capacity ub'], name= '1 per cent deep renovation', domain = fs.Domain.binary)
-        inv_15 = fs.Variable(lb = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'],
-                                ub = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity ub'], name = '1.5 per cent deep renovation', domain = fs.Domain.binary)
-        shallow_inv_1 = fs.Variable(lb =investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'],
-                                    ub = investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'],name= '1 per cent shallow renovation', domain = fs.Domain.binary)
-        shallow_inv_15 = fs.Variable(lb = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'],
-                                        ub = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'],name= '1.5 per cent shallow renovation', domain = fs.Domain.binary)
+        inv_1 = fs.Variable( name= '1 per cent deep renovation', domain = fs.Domain.binary)
+        inv_1_lb = fs.LessEqual(investment_option_dict[year][scenario]['1 per cent deep']['capacity lb'], inv_1)
+        inv_1_ub = fs.LessEqual(inv_1, investment_option_dict[year][scenario]['1 per cent deep']['capacity lb'])
+
+        inv_15 = fs.Variable( name = '1.5 per cent deep renovation', domain = fs.Domain.binary)
+        inv_15_lb = fs.LessEqual(investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'], inv_15)
+        inv_15_ub = fs.LessEqual(inv_15, investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'])
+
+        shallow_inv_1 = fs.Variable(name= '1 per cent shallow renovation', domain = fs.Domain.binary)
+        shallow_inv_1_lb = fs.LessEqual(investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'], shallow_inv_1)
+        shallow_inv_1_ub = fs.LessEqual(shallow_inv_1, investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'])
+
+        shallow_inv_15 = fs.Variable(name= '1.5 per cent shallow renovation', domain = fs.Domain.binary)
+
+        shallow_inv_15_lb = fs.LessEqual(investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'], shallow_inv_15)
+        shallow_inv_15_ub = fs.LessEqual(shallow_inv_15, investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'])
+        
+
         
         
-        deep_1_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1 per cent deep']['specific investment cost'])
-        deep_15_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1.5 per cent deep']['specific investment cost'])
-        shallow_1_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1 per cent shallow']['specific investment cost'])
-        shallow_15_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1.5 per cent shallow']['specific investment cost'])
+        deep_1_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1 per cent deep']['specific investment cost'])
+        deep_15_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1.5 per cent deep']['specific investment cost'])
+        shallow_1_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1 per cent shallow']['specific investment cost'])
+        shallow_15_cost = self.annuity(parameters['interest_rate'], 40, 0.2*investment_option_dict[year][scenario]['1.5 per cent shallow']['specific investment cost'])
 
         renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
 
@@ -186,7 +209,7 @@ class CityModel():
                                      ub = investment_option_dict[year][scenario]['DH grid expansion']['capacity [MWh per y] ub'],
                                      name='DH grid expansion in 1000 MWh')
         grid_expansion_cost = self.annuity(parameters['interest_rate'], 100, investment_option_dict[year][scenario]['DH grid expansion']['specific investment cost [EUR per GWh]'])
-        
+
         city = fs.Node(name='City')
         city.consumption[pl.Resources.heat] = lambda t: heat_history['DH'][t]  + grid_expansion_variable * heat_history['1000 MWh expansion'][t] + renovation_dh_heating(t)
         city.consumption[pl.Resources.power] =lambda t: power_demand[t]
@@ -208,9 +231,13 @@ class CityModel():
 
         # Removing taxes according to excel Innsbruck_v3 sheet electricity cotst italy
         powerExport = pl.Export(resource = pl.Resources.power,
-                                price =  (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1,
+                                price =  0,
                                 name='power export')
         parts.add(powerExport)
+        #pv_power_export = pl.Export(resource = pl.Resources.power,
+        #                            price = power_export_price,
+        #                            name = 'PV Power export')
+        #parts.add(pv_power_export)
         
         CO2_emissions = pl.Export(resource = pl.Resources.CO2,
                         price = 0,
@@ -220,18 +247,18 @@ class CityModel():
 
 
         """ Production Units """
-        parts.add(pl.LinearCHP(name='Existing CHP A', eta=0.776, alpha=0.98, capacity_lb= 4.27 / hour, capacity_ub = 4.27 / hour, fuel=pl.Resources.natural_gas))
-        parts.add(pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, capacity_lb= 4.27 / hour, capacity_ub = 4.27 / hour, fuel=pl.Resources.natural_gas))
+        parts.add(pl.LinearCHP(name='Existing CHP A', eta=0.776, alpha=0.98, capacity_lb= 4.27, capacity_ub = 4.27 , fuel=pl.Resources.natural_gas, running_cost = -power_export_price, hour = hour))
+        parts.add(pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, capacity_lb= 4.27 / hour, capacity_ub = 4.27 / hour, fuel=pl.Resources.natural_gas, running_cost = -power_export_price, hour = hour))
     
-        parts.add(pl.Boiler(name='Existing Boiler A', eta=0.9, Fmax=8.84 / hour, fuel=pl.Resources.natural_gas))
-        parts.add(pl.Boiler(name='Existing Boiler B',eta=0.87, Fmax=8.84 / hour, fuel=pl.Resources.natural_gas))
-        parts.add(pl.Boiler(name='Existing Boiler C', eta=0.89, Fmax=8.84 / hour, fuel=pl.Resources.natural_gas))    
-        parts.add(pl.Boiler(name='Existing Boiler D', eta= 0.77, Fmax= 8.84 / hour, fuel=pl.Resources.natural_gas))
+        parts.add(pl.Boiler(name='Existing Boiler A', eta=0.9, Fmax=8.84, fuel=pl.Resources.natural_gas, hour = hour))
+        parts.add(pl.Boiler(name='Existing Boiler B',eta=0.87, Fmax=8.84, fuel=pl.Resources.natural_gas, hour = hour))
+        parts.add(pl.Boiler(name='Existing Boiler C', eta=0.89, Fmax=8.84, fuel=pl.Resources.natural_gas, hour = hour))    
+        parts.add(pl.Boiler(name='Existing Boiler D', eta= 0.77, Fmax= 8.84, fuel=pl.Resources.natural_gas, hour = hour))
 
         # Running waste incinerator at 25 MW output max according to D4.2 p 32, techincal limit is 45
-        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 25/hour, capacity_ub= 45/hour, fuel=pl.Resources.waste))  
+        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 25, capacity_ub= 45, fuel=pl.Resources.waste, running_cost = -power_export_price, hour = hour))  
         
-        parts.add(pl.Accumulator(name='Existing Accumulator', resource=pl.Resources.heat, max_flow=60/hour, capacity_lb= 220, capacity_ub= 220, loss_factor = 0.005, t_start = parameters['t_start'], t_end = parameters['t_end'])            )
+        parts.add(pl.Accumulator(name='Existing Accumulator', resource=pl.Resources.heat, max_flow=60, capacity_lb= 220, capacity_ub= 220, loss_factor = 0.005, t_start = parameters['t_start'], t_end = parameters['t_end'], hour = hour))
         
         """ Production alternatives for the scenarios"""
         parts.add(
@@ -239,10 +266,12 @@ class CityModel():
                 name = 'Natural gas CHP',
                 alpha = 0.98,
                 eta = 0.75,
-                capacity_lb = investment_option_dict[year][scenario]['NG CHP']['capacity [MW] lb']/hour,
-                capacity_ub = investment_option_dict[year][scenario]['NG CHP']['capacity [MW] ub']/hour,
-                specific_investment_cost = self.annuity(parameters['interest_rate'], 25, investment_option_dict[year][scenario]['NG CHP']['specific investment cost'])*hour,
-                fuel =  pl.Resources.natural_gas
+                capacity_lb = investment_option_dict[year][scenario]['NG CHP']['capacity [MW] lb'],
+                capacity_ub = investment_option_dict[year][scenario]['NG CHP']['capacity [MW] ub'],
+                specific_investment_cost = self.annuity(parameters['interest_rate'], 25, investment_option_dict[year][scenario]['NG CHP']['specific investment cost']),
+                fuel =  pl.Resources.natural_gas,
+                running_cost = -power_export_price,
+                hour = hour
                 )
         )
         
@@ -251,10 +280,12 @@ class CityModel():
                 name = 'Biomass CHP',
                 alpha = 0.98,
                 eta = 0.7,
-                capacity_lb = investment_option_dict[year][scenario]['Bio CHP']['capacity [MW] lb']/hour,
-                capacity_ub = investment_option_dict[year][scenario]['Bio CHP']['capacity [MW] ub']/hour,
-                specific_investment_cost = self.annuity(parameters['interest_rate'], 25, investment_option_dict[year][scenario]['Bio CHP']['specific investment cost'])*hour,
-                fuel =  pl.Resources.natural_gas
+                capacity_lb = investment_option_dict[year][scenario]['Bio CHP']['capacity [MW] lb'],
+                capacity_ub = investment_option_dict[year][scenario]['Bio CHP']['capacity [MW] ub'],
+                specific_investment_cost = self.annuity(parameters['interest_rate'], 25, investment_option_dict[year][scenario]['Bio CHP']['specific investment cost']),
+                fuel =  pl.Resources.natural_gas,
+                running_cost = -power_export_price,
+                hour = hour
                 )
         )
         
@@ -264,9 +295,11 @@ class CityModel():
                 name = input_data['SolarPV']['name'],
                 G = solar_data['Mean Irradiance [W/m2]'],
                 T = solar_data['Mean temperature [C]'], 
-                capacity_lb = investment_option_dict[year][scenario]['PV']['capacity [MW] lb']/hour,
-                capacity_ub = investment_option_dict[year][scenario]['PV']['capacity [MW] ub']/hour,
-                specific_investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost'])*hour
+                capacity_lb = investment_option_dict[year][scenario]['PV']['capacity [MW] lb'],
+                capacity_ub = investment_option_dict[year][scenario]['PV']['capacity [MW] ub'],
+                specific_investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost']),
+                running_cost = -power_export_price,
+                hour = hour
             )
         )
                 
@@ -274,18 +307,23 @@ class CityModel():
             pl.Accumulator(
                 name = 'New Accumulator',
                 resource = pl.Resources.heat, 
-                max_flow = investment_option_dict[year][scenario]['Accumulator']['max flow [MWh perh]'] /hour, 
+                max_flow = investment_option_dict[year][scenario]['Accumulator']['max flow [MWh perh]'], 
                 capacity_lb = investment_option_dict[year][scenario]['Accumulator']['capacity [MWh] lb'],
                 capacity_ub = investment_option_dict[year][scenario]['Accumulator']['capacity [MWh] ub'],
                 loss_factor = 0.005,
                 specific_investment_cost = self.annuity(parameters['interest_rate'], input_data['Accumulator']['lifespan'], investment_option_dict[year][scenario]['Accumulator']['specific investment cost']),
                 t_start = parameters['t_start'],
-                t_end = parameters['t_end']))  
+                t_end = parameters['t_end'],
+                hour = hour
+            )
+        )  
     
         timeindependent_constraint = []
         
         if 'Trade_off' in scenario:
-            timeindependent_constraint = [renovation_const_1]
+            timeindependent_constraint = [renovation_const_1, inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub]
+        else:
+            timeindependent_constraint = [inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub]
         
         return parts, timeindependent_constraint
         

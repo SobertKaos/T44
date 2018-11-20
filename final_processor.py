@@ -194,10 +194,9 @@ def final_processor(total_results, output_path = None, base_case = None):
         final_results["total costs EUR"][case_name] = total_costs
         final_results['CO2 emissions relative to base'][case_name] = total_CO2 / base_CO2
         final_results['investment cost efficiency'][case_name] = cost_efficiency
-        
-        if 'trade off' in case_name.lower():
-            investments = result['invest or not']
-            final_results['investments'][case_name] = investments        
+    
+        investments = result['invest or not']
+        final_results['investments'][case_name] = investments        
 
     maximum_CO2_reduction = {'relative' : 1, "case": " "}
     if base_CO2:
