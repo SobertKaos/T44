@@ -155,94 +155,55 @@ class CityModel():
         shallow_renovation_data_15_DH = heat_history['{} Shallow renovation 1.5 per cent DH'.format(year)]
         shallow_renovation_data_15_Other = heat_history['{} Shallow renovation 1.5 per cent Other'.format(year)]
 
-
-        if not 'Trade_off' in scenario:
-            renovation = fs.Node(name = input_data['Renovation']['name'])
-            renovation.consumption[pl.Resources.heat]= lambda t: renovation_data_1_DH[t]
-            renovation.consumption[pl.Resources.natural_gas] = lambda t: renovation_data_1_Other[t]
-            renovation.state_variables = lambda t: ()
-            renovation.cost = lambda t: 0
-            parts.add(renovation)
-
-        else:
-            # Renovation variables:
-            
-
-            renovation = fs.Node(name = input_data['Renovation']['name'])
-            inv_1 = fs.Variable(name= 'inv_1', domain = fs.Domain.binary)
-            renovation.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']), 'renovation level': input_data['Renovation']['capacity']}
-            renovation.state_variables = lambda t: {}
-            renovation.static_variables = {inv_1}
-
-            renovation.consumption[pl.Resources.heat]= lambda t: renovation_data_1_DH[t]*inv_1
-            renovation.consumption[pl.Resources.natural_gas] = lambda t: renovation_data_1_Other[t]*inv_1
-
-            renovation.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']) * inv_1
-            renovation.cost = lambda t:0
-            parts.add(renovation)
-            
-            
-            renovation_15 = fs.Node(name = input_data['Renovation_15']['name'])
-            inv_15 = fs.Variable(name = 'inv_15', domain = fs.Domain.binary)
-            renovation_15.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Renovation_15']['lifespan'],input_data['Renovation_15']['investment_cost']), 'renovation level': input_data['Renovation_15']['capacity']}
-            renovation_15.state_variables = lambda t: {}
-            renovation_15.static_variables ={inv_15}
-
-            renovation_15.consumption[pl.Resources.heat]= lambda t: renovation_data_15_DH[t]*inv_15
-            renovation_15.consumption[pl.Resources.natural_gas] = lambda t: renovation_data_15_Other[t]*inv_15
-
-            renovation_15.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Renovation_15']['lifespan'],input_data['Renovation_15']['investment_cost']) * inv_15
-            renovation_15.cost = lambda t:0
-            parts.add(renovation_15)
-            
-            
-            # Shallow renovations
-            shallow_inv_1 = fs.Variable(name= 'shallow_inv_1', domain = fs.Domain.binary)
-            shallow_renovation_1 =fs.Node(name = input_data['Shallow_Renovation_1']['name'])
-            shallow_renovation_1.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_1']['lifespan'],input_data['Shallow_Renovation_1']['investment_cost']), 'renovation level': input_data['Shallow_Renovation_1']['capacity']}
-            shallow_renovation_1.state_variables = lambda t: {}
-            shallow_renovation_1.static_variables ={shallow_inv_1}
-            shallow_renovation_1.consumption[pl.Resources.heat]= lambda t: shallow_renovation_data_1_DH[t]*shallow_inv_1
-            shallow_renovation_1.consumption[pl.Resources.natural_gas] = lambda t: shallow_renovation_data_1_Other[t]*shallow_inv_1
-            shallow_renovation_1.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_1']['lifespan'],input_data['Shallow_Renovation_1']['investment_cost']) * shallow_inv_1
-            shallow_renovation_1.cost = lambda t: 0
-            parts.add(shallow_renovation_1)
-
-            shallow_inv_15 = fs.Variable(name= 'shallow_inv_15', domain = fs.Domain.binary)
-            shallow_renovation_15 =fs.Node(name = input_data['Shallow_Renovation_15']['name'])
-            shallow_renovation_15.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_15']['lifespan'],input_data['Shallow_Renovation_15']['investment_cost']), 'renovation level': input_data['Shallow_Renovation_15']['capacity']}
-            shallow_renovation_15.state_variables = lambda t: {}
-            shallow_renovation_15.static_variables ={shallow_inv_15}
-            shallow_renovation_15.consumption[pl.Resources.heat]= lambda t: shallow_renovation_data_15_DH[t]*shallow_inv_15
-            shallow_renovation_15.consumption[pl.Resources.natural_gas] = lambda t: shallow_renovation_data_15_Other[t]*shallow_inv_15
-            shallow_renovation_15.investment_cost =  self.annuity(parameters['interest_rate'],input_data['Shallow_Renovation_15']['lifespan'],input_data['Shallow_Renovation_15']['investment_cost']) * shallow_inv_15
-            shallow_renovation_15.cost = lambda t: 0
-            parts.add(shallow_renovation_15)
-
-            renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
-
+        inv_1 = fs.Variable(lb = investment_option_dict[year][scenario]['1 per cent deep']['capacity lb'],
+                                ub = investment_option_dict[year][scenario]['1 per cent deep']['capacity ub'], name= '1 per cent deep renovation', domain = fs.Domain.binary)
+        inv_15 = fs.Variable(lb = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'],
+                                ub = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity ub'], name = '1.5 per cent deep renovation', domain = fs.Domain.binary)
+        shallow_inv_1 = fs.Variable(lb =investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'],
+                                    ub = investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'],name= '1 per cent shallow renovation', domain = fs.Domain.binary)
+        shallow_inv_15 = fs.Variable(lb = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'],
+                                        ub = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'],name= '1.5 per cent shallow renovation', domain = fs.Domain.binary)
         
+        
+        deep_1_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1 per cent deep']['specific investment cost'])
+        deep_15_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1.5 per cent deep']['specific investment cost'])
+        shallow_1_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1 per cent shallow']['specific investment cost'])
+        shallow_15_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1.5 per cent shallow']['specific investment cost'])
+
+        renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
+
+        renovation_non_dh_heating = lambda t: shallow_renovation_data_1_Other[t] * shallow_inv_1 \
+                                            + shallow_renovation_data_15_Other[t] * shallow_inv_15 \
+                                            + renovation_data_1_Other[t] * inv_1 \
+                                            + renovation_data_15_Other[t] * inv_15
+        renovation_dh_heating = lambda t: shallow_renovation_data_1_DH[t] * shallow_inv_1 \
+                                            + shallow_renovation_data_15_DH[t] * shallow_inv_15 \
+                                            + renovation_data_1_DH[t] * inv_1 \
+                                            + renovation_data_15_DH[t] * inv_15
+
 
         grid_expansion_variable = fs.Variable(lb = investment_option_dict[year][scenario]['DH grid expansion']['capacity [MWh per y] lb'], 
                                      ub = investment_option_dict[year][scenario]['DH grid expansion']['capacity [MWh per y] ub'],
                                      name='DH grid expansion in 1000 MWh')
+        grid_expansion_cost = self.annuity(parameters['interest_rate'], 100, investment_option_dict[year][scenario]['DH grid expansion']['specific investment cost [EUR per GWh]'])
+        
         city = fs.Node(name='City')
-        city.consumption[pl.Resources.heat] = lambda t: heat_history['DH'][t]  + grid_expansion_variable * heat_history['1000 MWh expansion'][t]
+        city.consumption[pl.Resources.heat] = lambda t: heat_history['DH'][t]  + grid_expansion_variable * heat_history['1000 MWh expansion'][t] + renovation_dh_heating(t)
         city.consumption[pl.Resources.power] =lambda t: power_demand[t]
         city.cost = lambda t: power_demand[t] * parameters['prices'][pl.Resources.power]
-        city.investment_cost = grid_expansion_variable * investment_option_dict[year][scenario]['DH grid expansion']['specific investment cost [EUR per GWh]']
+        city.investment_cost = grid_expansion_variable * grid_expansion_cost + inv_1 * deep_1_cost + inv_15 * deep_15_cost + shallow_inv_1 * shallow_1_cost + shallow_inv_15 * shallow_15_cost 
         city.state_variables = lambda t: {}
-        city.static_variables = {grid_expansion_variable}
+        city.static_variables = {grid_expansion_variable, inv_1, inv_15, shallow_inv_1, shallow_inv_15}
         parts.add(city)     
 
 
         heating = fs.Node(name='Heating') #se till att heat_history['Other'] minskar när DH byggs ut och blir större
-        non_dh_heating_consumption = lambda t: heat_history['Other heating'][t]  - grid_expansion_variable * heat_history['1000 MWh expansion'][t]
+        non_dh_heating_consumption = lambda t: heat_history['Other heating'][t]  - grid_expansion_variable * heat_history['1000 MWh expansion'][t] + renovation_non_dh_heating(t)
         heating.consumption[pl.Resources.natural_gas] = lambda t: 0.8 * non_dh_heating_consumption(t) / 0.95 # Verkningsgrad gasuppvärmning
         heating.consumption[pl.Resources.power] = lambda t: 0.2 * non_dh_heating_consumption(t) / 0.97 # Verkningsgrad eluppvärmning
         heating.cost = lambda t: heating.consumption[pl.Resources.power](t) * parameters['prices'][pl.Resources.power]
         heating.state_variables = lambda t: {}
-        heating.static_variables = {grid_expansion_variable}        
+        heating.static_variables = {grid_expansion_variable, inv_1, inv_15, shallow_inv_1, shallow_inv_15}        
         parts.add(heating)
 
         # Removing taxes according to excel Innsbruck_v3 sheet electricity cotst italy
