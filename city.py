@@ -165,6 +165,9 @@ class CityModel():
             parts.add(renovation)
 
         else:
+            # Renovation variables:
+            
+
             renovation = fs.Node(name = input_data['Renovation']['name'])
             inv_1 = fs.Variable(name= 'inv_1', domain = fs.Domain.binary)
             renovation.test = {'investment_cost' : self.annuity(parameters['interest_rate'],input_data['Renovation']['lifespan'],input_data['Renovation']['investment_cost']), 'renovation level': input_data['Renovation']['capacity']}
@@ -218,35 +221,28 @@ class CityModel():
 
             renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
 
-            
+        
+
+        grid_expansion_variable = fs.Variable(lb = investment_option_dict[year][scenario]['DH grid expansion']['capacity [MWh per y] lb'], 
+                                     ub = investment_option_dict[year][scenario]['DH grid expansion']['capacity [MWh per y] ub'],
+                                     name='DH grid expansion in 1000 MWh')
         city = fs.Node(name='City')
-        city.state_variables = lambda t: {}
-
-        if scenario in 'Max_DH':
-            if self.year == '2030':
-                city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]+heat_history['2030 DH expansion'][t]
-            else:
-                city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]+heat_history['2050 DH expansion'][t]
-        else:
-            city.consumption[pl.Resources.heat] =  lambda t: heat_history['DH'][t]
-
+        city.consumption[pl.Resources.heat] = lambda t: heat_history['DH'][t]  + grid_expansion_variable * heat_history['1000 MWh expansion'][t]
         city.consumption[pl.Resources.power] =lambda t: power_demand[t]
         city.cost = lambda t: power_demand[t] * parameters['prices'][pl.Resources.power]
-        parts.add(city) 
+        city.investment_cost = grid_expansion_variable * investment_option_dict[year][scenario]['DH grid expansion']['specific investment cost [EUR per GWh]']
+        city.state_variables = lambda t: {}
+        city.static_variables = {grid_expansion_variable}
+        parts.add(city)     
 
 
         heating = fs.Node(name='Heating') #se till att heat_history['Other'] minskar när DH byggs ut och blir större
-        if self.scenario in 'Max DH':
-            other_heating_consumption = lambda t: heat_history['Other heating'][t]- heat_history['{} DH expansion'.format(self.year)][t]
-            heating.consumption[pl.Resources.natural_gas] = lambda t: other_heating_consumption(t) *0.8/0.95 #verkningsgrad gasuppvärmning
-            heating.consumption[pl.Resources.power] = lambda t: other_heating_consumption(t) *0.2/0.97  #verkningsgrad eluppvärmning
-        else:
-            other_heating_consumption = lambda t: heat_history['Other heating'][t]
-            heating.consumption[pl.Resources.natural_gas] = lambda t: other_heating_consumption(t) *0.8/0.95 #verkningsgrad gasuppvärmning
-            heating.consumption[pl.Resources.power] = lambda t: other_heating_consumption(t) *0.2/0.97  #verkningsgrad eluppvärmning
-        
-        heating.cost = lambda t: 0
+        non_dh_heating_consumption = lambda t: heat_history['Other heating'][t]  - grid_expansion_variable * heat_history['1000 MWh expansion'][t]
+        heating.consumption[pl.Resources.natural_gas] = lambda t: 0.8 * non_dh_heating_consumption(t) / 0.95 # Verkningsgrad gasuppvärmning
+        heating.consumption[pl.Resources.power] = lambda t: 0.2 * non_dh_heating_consumption(t) / 0.97 # Verkningsgrad eluppvärmning
+        heating.cost = lambda t: heating.consumption[pl.Resources.power](t) * parameters['prices'][pl.Resources.power]
         heating.state_variables = lambda t: {}
+        heating.static_variables = {grid_expansion_variable}        
         parts.add(heating)
 
         # Removing taxes according to excel Innsbruck_v3 sheet electricity cotst italy
@@ -272,7 +268,7 @@ class CityModel():
         parts.add(pl.Boiler(name='Existing Boiler D', eta= 0.77, Fmax= 8.84 / hour, fuel=pl.Resources.natural_gas))
 
         # Running waste incinerator at 25 MW output max according to D4.2 p 32, techincal limit is 45
-        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 25/hour, capacity_ub= 25/hour, fuel=pl.Resources.waste))  
+        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 25/hour, capacity_ub= 45/hour, fuel=pl.Resources.waste))  
         
         parts.add(pl.Accumulator(name='Existing Accumulator', resource=pl.Resources.heat, max_flow=60/hour, capacity_lb= 220, capacity_ub= 220, loss_factor = 0.005, t_start = parameters['t_start'], t_end = parameters['t_end'])            )
         
