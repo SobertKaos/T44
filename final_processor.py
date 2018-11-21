@@ -20,14 +20,6 @@ All_PEF_power = {
 }
 
 scenario_keys = {
-    "2030_BASE_Italy medium_CO2_cost": "2030 BASE Italy medium CO2 cost",
-    "2030_BASE_Italy medium_No_CO2_cost": "2030 BASE Italy medium NO CO2 cost",
-    "2030_BASE_Italy pessimistic_CO2_cost": "2030 BASE Italy pessimistic CO2 cost",
-    "2030_BASE_Italy pessimistic_No_CO2_cost": "2030 BASE  Italy pessimistic NO CO2 cost",
-    "2030_BASE_NP_CO2_cost": "2030 BASE NP CO2 cost",
-    "2030_BASE_NP_No_CO2_cost": "2030 BASE NP NO CO2 cost",
-    "2030_BASE_SD_CO2_cost": "2030 BASE SD CO2 cost",
-    "2030_BASE_SD_No_CO2_cost": "2030 BASE SD NO CO2 cost",
     "2030_BAU_Italy medium_CO2_cost": "2030 BAU Italy medium CO2 cost",
     "2030_BAU_Italy medium_No_CO2_cost": "2030 BAU Italy medium NO CO2 cost",
     "2030_BAU_Italy pessimistic_CO2_cost": "2030 BAU Italy pessimistic CO2 cost",
@@ -68,14 +60,6 @@ scenario_keys = {
     "2030_Trade_off_NP_No_CO2_cost": "2030 Trade off NP NO CO2 cost",
     "2030_Trade_off_SD_CO2_cost": "2030 Trade off SD CO2 cost",
     "2030_Trade_off_SD_No_CO2_cost": "2030 Trade off SD NO CO2 cost",
-    "2050_BASE_Italy medium_CO2_cost": "2050 BASE Italy medium CO2 cost",
-    "2050_BASE_Italy medium_No_CO2_cost": "2050 BASE Italy medium NO CO2 cost",
-    "2050_BASE_Italy pessimistic_CO2_cost": "2050 BASE Italy pessimistic CO2 cost",
-    "2050_BASE_Italy pessimistic_No_CO2_cost": "2050 BASE  Italy pessimistic NO CO2 cost",
-    "2050_BASE_NP_CO2_cost": "2050 BASE NP CO2 cost",
-    "2050_BASE_NP_No_CO2_cost": "2050 BASE NP NO CO2 cost",
-    "2050_BASE_SD_CO2_cost": "2050 BASE SD CO2 cost",
-    "2050_BASE_SD_No_CO2_cost": "2050 BASE SD NO CO2 cost",
     "2050_BAU_Italy medium_CO2_cost": "2050 BAU Italy medium CO2 cost",
     "2050_BAU_Italy medium_No_CO2_cost": "2050 BAU Italy medium NO CO2 cost",
     "2050_BAU_Italy pessimistic_CO2_cost": "2050 BAU Italy pessimistic CO2 cost",
@@ -156,7 +140,7 @@ def get_co2_cost_efficiency(base_case_total_costs, base_case_total_CO2, total_co
 
 def final_processor(total_results, output_path = None, base_case = None):
     if not base_case:
-        base_case = '2030_BASE_Italy medium_No_CO2_cost'
+        base_case = '2030_BAU_Italy medium_No_CO2_cost'
     base_CO2 = total_results[base_case]['total cost and emissions']['total emissions [kg/year]']
     base_total_costs= total_results[base_case]['total cost and emissions']['running cost [EUR/year]']
 

@@ -416,12 +416,9 @@ if __name__ == "__main__":
                 if CO2_cost in 'No_CO2_cost':
                     input_parameters['prices']['CO2'] = 0
 
-                for scenario in ['BASE', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
+                for scenario in ['BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
                     print('Running {}_{}_{}_{}'.format(year, scenario, price_scenario, CO2_cost))
-                    if scenario in 'BASE':
-                        input_data = data[year+'_BAU']
-                    else:
-                        input_data=data[year+'_'+scenario]
+                    input_data=data[year+'_'+scenario]
                     
                     model = CityModel(input_data, input_parameters, year, scenario)
                     model.RunModel()
@@ -439,6 +436,6 @@ if __name__ == "__main__":
     
     final_results = final_processor(total_results,
                                     output_path = "C:/Users\AlexanderKa/Desktop/Github/T4-4/output/total/",
-                                    base_case = '2030_BASE_Italy medium_No_CO2_cost')
+                                    base_case = '2030_BAU_Italy medium_No_CO2_cost')
     winsound.PlaySound("*", winsound.SND_ALIAS)
     
