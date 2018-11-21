@@ -18,6 +18,7 @@ class Resources(Enum):
     waste = 4
     biomass = 5
     CO2 = 6
+    pvpower = 7
     
 
 
@@ -121,15 +122,19 @@ class SolarPV(fs.Node):
 
         with fs.namespace(self):
             capacity = fs.Variable(lb = capacity_lb, ub = capacity_ub, name='PV capacity')
+            pv_power_capacity = fs.VariableCollection(lb = 0, ub = capacity_ub, name='PV production of export power')
+            power_capacity = fs.VariableCollection(lb = 0, ub = capacity_ub, name = 'PV production of consumption power')
 
         
         self.cost = lambda t: running_cost * self.production[Resources.power](t)            
         self.investment_cost = capacity * specific_investment_cost
                 
-        self.state_variables = lambda t: {} 
+        self.state_variables = lambda t: {pv_power_capacity(t), power_capacity(t)} 
         self.static_variables =  {capacity}
         
-        self.production[Resources.power] =lambda t: prod(t) * capacity / hour
+        self.production[Resources.power] =lambda t: prod(t) * power_capacity(t) / hour
+        self.production[Resources.pvpower] = lambda t: prod(t) * pv_power_capacity(t) / hour
+        self.constraints += lambda t: fs.Eq(pv_power_capacity(t) + power_capacity(t), capacity)
         
         def prod(t):
             c1 = -0.0177162

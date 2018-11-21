@@ -92,9 +92,14 @@ class CityModel():
         parameters['interest_rate'] = self.input_parameters['interest_rate']['interest_rate']
         
         for resource in pl.Resources:
+            if resource is pl.Resources.pvpower:
+                continue
             conversion_factor=0.003600 #To convert CO2 factor from kg/TJ to kg/MWh
             parameters['prices'][resource] = self.input_parameters['prices'][resource.name]
             parameters['CO2_factor'][resource] = self.input_parameters['CO2_factor'][resource.name]*conversion_factor
+        
+        parameters['CO2_factor'][pl.Resources.pvpower] = parameters['CO2_factor'][pl.Resources.power]
+        parameters['prices'][pl.Resources.pvpower] = parameters['prices'][pl.Resources.power]
         
         return parameters
     
@@ -218,10 +223,11 @@ class CityModel():
                                 price =  0,
                                 name='power export')
         parts.add(powerExport)
-        #pv_power_export = pl.Export(resource = pl.Resources.power,
-        #                            price = power_export_price,
-        #                            name = 'PV Power export')
-        #parts.add(pv_power_export)
+
+        pv_power_export = pl.Export(resource = pl.Resources.pvpower,
+                                    price = power_export_price,
+                                    name = 'PV Power export')
+        parts.add(pv_power_export)
         
         CO2_emissions = pl.Export(resource = pl.Resources.CO2,
                         price = 0,
@@ -281,7 +287,7 @@ class CityModel():
                 T = solar_data['Mean temperature [C]'], 
                 capacity_lb = investment_option_dict[year][scenario]['PV']['capacity [MW] lb'],
                 capacity_ub = investment_option_dict[year][scenario]['PV']['capacity [MW] ub'],
-                specific_investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], input_data['SolarPV']['investment_cost']),
+                specific_investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], investment_option_dict[year][scenario]['PV']['specific investment cost']),
                 running_cost = -power_export_price,
                 hour = hour
             )
@@ -410,9 +416,12 @@ if __name__ == "__main__":
                 if CO2_cost in 'No_CO2_cost':
                     input_parameters['prices']['CO2'] = 0
 
-                for scenario in ['BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
+                for scenario in ['BASE', 'BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 
                     print('Running {}_{}_{}_{}'.format(year, scenario, price_scenario, CO2_cost))
-                    input_data=data[year+'_'+scenario]
+                    if scenario in 'BASE':
+                        input_data = data[year+'_BAU']
+                    else:
+                        input_data=data[year+'_'+scenario]
                     
                     model = CityModel(input_data, input_parameters, year, scenario)
                     model.RunModel()
@@ -430,6 +439,6 @@ if __name__ == "__main__":
     
     final_results = final_processor(total_results,
                                     output_path = "C:/Users\AlexanderKa/Desktop/Github/T4-4/output/total/",
-                                    base_case = '2030_BAU_Italy medium_No_CO2_cost')
+                                    base_case = '2030_BASE_Italy medium_No_CO2_cost')
     winsound.PlaySound("*", winsound.SND_ALIAS)
     

@@ -1,5 +1,16 @@
 cases = {
     '2030': {
+        'BASE': {
+            'PV': {'capacity [MW] lb': 0, 'capacity [MW] ub': 0, 'specific investment cost': 6050000/23},
+            'Accumulator': {'capacity [MWh] lb': 0, 'capacity [MWh] ub': 0,'max flow [MWh perh]': 0,'specific investment cost': 0},
+            'DH grid expansion': {'capacity [MWh per y] lb': 0, 'capacity [MWh per y] ub': 0, 'specific investment cost [EUR per GWh]': 234742},
+            'NG CHP': {'capacity [MW] lb': 0, 'capacity [MW] ub': 0,'specific investment cost': 1200000},
+            'Bio CHP': {'capacity [MW] lb': 0, 'capacity [MW] ub': 0,'specific investment cost': 0},
+            '1 per cent deep': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 22442410725},
+            '1.5 per cent deep': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 32607450971},
+            '1 per cent shallow': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 13055861819},
+            '1.5 per cent shallow': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 18969369171}            
+            },
         'BAU': {
             'PV': {'capacity [MW] lb': 23, 'capacity [MW] ub': 23, 'specific investment cost': 6050000/23},
             'Accumulator': {'capacity [MWh] lb': 0, 'capacity [MWh] ub': 0,'max flow [MWh perh]': 0,'specific investment cost': 0},
@@ -57,6 +68,17 @@ cases = {
             }
         },
     '2050': {
+        'BASE': {
+            'PV': {'capacity [MW] lb': 0, 'capacity [MW] ub': 0, 'specific investment cost': 6050000/23},
+            'Accumulator': {'capacity [MWh] lb': 0, 'capacity [MWh] ub': 0,'max flow [MWh perh]': 0,'specific investment cost': 0},
+            'DH grid expansion': {'capacity [MWh per y] lb': 0, 'capacity [MWh per y] ub': 0, 'specific investment cost [EUR per GWh]': 234742},
+            'NG CHP': {'capacity [MW] lb': 0, 'capacity [MW] ub': 0,'specific investment cost': 1200000},
+            'Bio CHP': {'capacity [MW] lb': 0, 'capacity [MW] ub': 0,'specific investment cost': 0},
+            '1 per cent deep': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 22442410725},
+            '1.5 per cent deep': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 32607450971},
+            '1 per cent shallow': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 13055861819},
+            '1.5 per cent shallow': {'capacity lb': 0, 'capacity ub': 0, 'specific investment cost': 18969369171}            
+            },
         'BAU': {
             'PV': {'capacity [MW] lb': 33, 'capacity [MW] ub': 33, 'specific investment cost': 12000000/33},
             'Accumulator': {'capacity [MWh] lb': 0, 'capacity [MWh] ub': 0,'max flow [MWh perh]': 0,'specific investment cost': 0},
