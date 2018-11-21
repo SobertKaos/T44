@@ -312,7 +312,7 @@ class CityModel():
         renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
         minimum_renovation = fs.Eq(1, inv_1+inv_15+shallow_inv_1+shallow_inv_15)
         if 'Trade_off' in scenario:
-            timeindependent_constraint = [minimum_renovation]
+            timeindependent_constraint = [renovation_const_1]
             #renovation_const_1
             #timeindependent_constraint = [inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub] 
         #else:
