@@ -223,7 +223,7 @@ def get_co2_cost_efficiency(base_case_total_costs, base_case_total_CO2, total_co
 def final_processor(total_results, output_path = None, base_case = None):
     if not base_case:
         base_case = '2030_BAU_Italy medium_No_CO2_cost'
-    """
+    
     base_cases = [
         "2030_BAU_Italy medium_CO2_cost",
         "2030_BAU_Italy medium_No_CO2_cost",
@@ -234,15 +234,15 @@ def final_processor(total_results, output_path = None, base_case = None):
         "2030_BAU_SD_CO2_cost",
         "2030_BAU_SD_No_CO2_cost"]
     
-        base_CO2 = dict()
-        base_total_costs = dict()
+    base_CO2 = dict()
+    base_total_costs = dict()
     for case in base_cases:
-        base_CO2 = total_results[case]['total cost and emissions']['total emissions [kg/year]']
-        base_total_costs= total_results[case]['total cost and emissions']['running cost [EUR/year]']
-    """
+        base_CO2[case] = total_results[case]['total cost and emissions']['total emissions [kg/year]']
+        base_total_costs[case]= total_results[case]['total cost and emissions']['running cost [EUR/year]']
+    
 
-    base_CO2 = total_results[base_case]['total cost and emissions']['total emissions [kg/year]']
-    base_total_costs= total_results[base_case]['total cost and emissions']['running cost [EUR/year]']
+    #base_CO2 = total_results[base_case]['total cost and emissions']['total emissions [kg/year]']
+    #base_total_costs= total_results[base_case]['total cost and emissions']['running cost [EUR/year]']
 
     for case, result in total_results.items():
         case_name = new_scenario_keys[case][0]+" "+new_scenario_keys[case][1]
@@ -258,33 +258,35 @@ def final_processor(total_results, output_path = None, base_case = None):
         
         """ Get investment cost """
         investment_costs = result['total cost and emissions']['investment cost [EUR/year]']
-        """
-        if 'trade off' in case_name.lower():
-            investment_costs = result['total cost and emissions']['investment cost [EUR/year]']
-        else:
-            investment_costs = 0
-            for technology in result['input for scenario'].keys():
-                if 'existing' in technology.lower():
-                    pass
-                else:
-                    interest_rate = result['interest rate']
-                    lifespan = result['input for scenario'][technology]['lifespan']
-                    total_technology_investment_cost = result['input for scenario'][technology]['investment_cost']
-                    if 'renovation' in technology.lower() :
-                        "Deep renovation in non-trade off cases"
-                        if "2030" in case_name:
-                            total_technology_investment_cost = 76050075.6071256
-                        else:
-                             total_technology_investment_cost = 167708546.405733
 
-                    technology_investment_cost= annuity(interest_rate, lifespan, total_technology_investment_cost)
-                    investment_costs += technology_investment_cost
-        if 'max dh' in case_name.lower():
-            yearly_dh_grid_extension_cost = {2030: 0, 2050: 0}
-            investment_costs += yearly_dh_grid_extension_cost[year]
-        """
+        if 'italy medium' in case.lower():
+            if 'no_co2_cost' in case.lower():
+                base_case = "2030_BAU_Italy medium_No_CO2_cost"
+            else:
+                base_case = "2030_BAU_Italy medium_CO2_cost"
+        elif 'italy pessimistic' in case.lower():
+            if 'no_co2_cost' in case.lower():
+                base_case = "2030_BAU_Italy pessimistic_No_CO2_cost"
+            else:
+                base_case = "2030_BAU_Italy pessimistic_CO2_cost"
+        elif 'sd' in case.lower():
+            if 'no_co2_cost' in case.lower():
+                base_case = "2030_BAU_SD_No_CO2_cost"
+            else:
+                base_case = "2030_BAU_SD_CO2_cost"
+        elif 'np' in case.lower():
+            if 'no_co2_cost' in case.lower():
+                base_case = "2030_BAU_NP_No_CO2_cost"
+            else:
+                base_case = "2030_BAU_NP_CO2_cost"
+        else:
+            pdb.set_trace()
+            
+
+
+
         total_costs = investment_costs + running_costs
-        cost_efficiency = get_co2_cost_efficiency(base_total_costs, base_CO2, total_costs, total_CO2)
+        cost_efficiency = get_co2_cost_efficiency(base_total_costs[base_case], base_CO2[base_case], total_costs, total_CO2)
 
         if not new_scenario_keys[case][0] in final_results["total CO2 kg"].keys():
             final_results["total CO2 kg"][new_scenario_keys[case][0]] = dict()
@@ -302,24 +304,14 @@ def final_processor(total_results, output_path = None, base_case = None):
         final_results["running costs EUR"][new_scenario_keys[case][0]][new_scenario_keys[case][1]] = running_costs
         final_results["investment costs EUR"][new_scenario_keys[case][0]][new_scenario_keys[case][1]] = investment_costs
         final_results["total costs EUR"][new_scenario_keys[case][0]][new_scenario_keys[case][1]] = total_costs
-        final_results['CO2 emissions relative to base'][new_scenario_keys[case][0]][new_scenario_keys[case][1]] = total_CO2 / base_CO2
+        final_results['CO2 emissions relative to base'][new_scenario_keys[case][0]][new_scenario_keys[case][1]] = total_CO2 / base_CO2[base_case]
         final_results['investment cost efficiency'][new_scenario_keys[case][0]][new_scenario_keys[case][1]] = cost_efficiency
+        print('{} -!- {}'.format(base_case, case))
 
         investments = result['invest or not']
         final_results['investments'][new_scenario_keys[case][0]][new_scenario_keys[case][1]] = investments        
 
-    maximum_CO2_reduction = {'relative' : 1, "case": " "}
-    #if base_CO2:
-    #    for case, scenario in final_results["total CO2 kg"].keys():
-    #        if case in final_results['investments'].keys():
-    #            continue
-    #        relative_CO2 = final_results["total CO2 kg"][case][scenario] / base_CO2
-    #        final_results['CO2 emissions relative to base'][case][scenario] = relative_CO2
-
-    #        if relative_CO2 < maximum_CO2_reduction['relative']:
-    #            maximum_CO2_reduction['case'] = case
-    #            maximum_CO2_reduction['relative'] = relative_CO2
-                    
+                        
     if output_path:
         "Write total results to excel"
         save_results_excel(final_results, output_path)
