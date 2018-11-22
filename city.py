@@ -142,7 +142,7 @@ class CityModel():
 
     def make_parts(self, parameters):
         from cases import cases as investment_option_dict
-
+        assert parameters['interest_rate'] == 0.028
         parts = set()
         heat_history = self.get_heat_history(parameters['time_unit'])
         power_demand = heat_history['Electricity']
@@ -159,7 +159,6 @@ class CityModel():
                         CO2_factor=parameters['CO2_factor'][r]))
     
 
-        
         # All renovation data are negative numbers
         renovation_data_1_DH = heat_history['{} Renovation 1 per cent DH'.format(year)]
         renovation_data_1_Other = heat_history['{} Renovation 1 per cent Other'.format(year)]
@@ -175,7 +174,7 @@ class CityModel():
         inv_15 =fs.Variable( name = '1.5 per cent deep renovation', lb = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity lb'], ub = investment_option_dict[year][scenario]['1.5 per cent deep']['capacity ub'], domain = fs.Domain.binary)
         shallow_inv_1 = fs.Variable(name= '1 per cent shallow renovation', lb = investment_option_dict[year][scenario]['1 per cent shallow']['capacity lb'], ub = investment_option_dict[year][scenario]['1 per cent shallow']['capacity ub'], domain = fs.Domain.binary)
         shallow_inv_15 = fs.Variable(name= '1.5 per cent shallow renovation', lb = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity lb'], ub = investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity ub'], domain = fs.Domain.binary)
-        
+
         
         deep_1_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1 per cent deep']['specific investment cost'])
         deep_15_cost = self.annuity(parameters['interest_rate'], 40, investment_option_dict[year][scenario]['1.5 per cent deep']['specific investment cost'])
@@ -318,11 +317,16 @@ class CityModel():
             )
         )  
     
+        C1 = fs.LessEqual(inv_1, investment_option_dict[year][scenario]['1 per cent deep']['capacity ub'])
+        C2 = fs.LessEqual(inv_15, investment_option_dict[year][scenario]['1.5 per cent deep']['capacity ub'])
+        C3 = fs.LessEqual(shallow_inv_1, investment_option_dict[year][scenario]['1 per cent shallow']['capacity ub'])
+        C4 = fs.LessEqual(shallow_inv_15, investment_option_dict[year][scenario]['1.5 per cent shallow']['capacity ub'])
+
         timeindependent_constraint = []
         renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
         minimum_renovation = fs.Eq(1, inv_1+inv_15+shallow_inv_1+shallow_inv_15)
-        if 'Trade_off' in scenario:
-            timeindependent_constraint = [minimum_renovation]
+        #if 'Trade_off' in scenario:
+        timeindependent_constraint = [minimum_renovation, C1, C2, C3, C4]
             #renovation_const_1
             #timeindependent_constraint = [inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub] 
         #else:

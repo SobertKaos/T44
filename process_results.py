@@ -140,41 +140,7 @@ def get_total_results(m, parameters, parts, Resources, scenario):
                 variables = set()
                 for v in part.static_variables:
                     if v.value > 0:
-                        static_variables[v.name]=v.value
-                    #variables.add('{}: {}'.format(v.name, v.value))
-                #static_variables[part.name]=variables
-                
-    """
-    if 'Trade_off' in scenario:
-        for part in parts:
-            if 'static_variables' in dir(part):
-                if hasattr(part, 'investment_cost'):
-                    if not 'Existing' in part.name:
-                        investment_cost[part.name]=part.investment_cost.value
-                        investment_cost_tot += part.investment_cost.value
-
-                    for v in part.static_variables:
-                        if v.value == 0:
-                            v.value = 'no investment'
-                        elif v.value == 1:
-                            v.value = 'yes invest max capacity'
-                        else:
-                            v.value = ('yes invest %s MW' %v.value)
-                        if 'Renovation' in part.name:
-                            if investment_cost[part.name] != 0:
-                                v.value = 'invest max capacity'
-                            else:
-                                v.value = 'no investment'
-                        static_variables[part.name]=v.value           
-    else:
-        static_variables[scenario] = ['No investment alternatives in this scenario']
-
-        for part in parts:
-            if hasattr(part, 'investment_cost'):
-                if not 'Existing' in part.name:
-                    investment_cost_tot += part.investment_cost
-    """
-    """Running cost for the system, in this case it only includes fuel cost"""
+                        static_variables[v.name]=v.value                
     
     cost = {}
     cost_tot=0
