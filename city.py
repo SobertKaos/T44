@@ -92,14 +92,9 @@ class CityModel():
         parameters['interest_rate'] = self.input_parameters['interest_rate']['interest_rate']
         
         for resource in pl.Resources:
-            if resource is pl.Resources.pvpower:
-                continue
             conversion_factor=0.003600 #To convert CO2 factor from kg/TJ to kg/MWh
             parameters['prices'][resource] = self.input_parameters['prices'][resource.name]
             parameters['CO2_factor'][resource] = self.input_parameters['CO2_factor'][resource.name]*conversion_factor
-        
-        parameters['CO2_factor'][pl.Resources.pvpower] = parameters['CO2_factor'][pl.Resources.power]
-        parameters['prices'][pl.Resources.pvpower] = parameters['prices'][pl.Resources.power]
         
         return parameters
     
@@ -132,7 +127,10 @@ class CityModel():
             cluster.cost = lambda t: 0
             for p in parts:
                 if not isinstance(p, fs.parts.FlowNetwork) and (r in p.resources):
-                    cluster.add_part(p)
+                    if p.name.lower() in ['city', 'heating'] and r is pl.Resources.power:
+                        model.add_part(p)
+                    else:
+                        cluster.add_part(p)
                 else:
                     model.add_part(p)
             model.add_part(cluster)
@@ -152,14 +150,14 @@ class CityModel():
         power_export_price = (parameters['prices'][pl.Resources.power]-(0.0612+0.00658)*1000)/1.1
 
         for r in pl.Resources:
-            if r not in [pl.Resources.heat, pl.Resources.CO2]:
+            if r not in [pl.Resources.heat, pl.Resources.CO2, pl.Resources.power]:
                 parts.add(
                     pl.Import(
                         resource=r,
                         price=parameters['prices'][r],
                         name='Import({})'.format(r),
                         CO2_factor=parameters['CO2_factor'][r]))
-        
+    
 
         
         # All renovation data are negative numbers
@@ -202,12 +200,11 @@ class CityModel():
         city = fs.Node(name='City')
         city.consumption[pl.Resources.heat] = lambda t: heat_history['DH'][t]  + grid_expansion_variable * heat_history['1000 MWh expansion'][t] + renovation_dh_heating(t)
         city.consumption[pl.Resources.power] =lambda t: power_demand[t]
-        city.cost = lambda t: power_demand[t] * parameters['prices'][pl.Resources.power]
+        city.cost = lambda t: 0 # city.consumption[pl.Resources.power](t) * parameters['prices'][pl.Resources.power]
         city.investment_cost = grid_expansion_variable * grid_expansion_cost + inv_1 * deep_1_cost + inv_15 * deep_15_cost + shallow_inv_1 * shallow_1_cost + shallow_inv_15 * shallow_15_cost 
         city.state_variables = lambda t: {}
         city.static_variables = {grid_expansion_variable, inv_1, inv_15, shallow_inv_1, shallow_inv_15}
         parts.add(city)     
-
 
         heating = fs.Node(name='Heating') #se till att heat_history['Other'] minskar när DH byggs ut och blir större
         non_dh_heating_consumption = lambda t: heat_history['Other heating'][t]  - grid_expansion_variable * heat_history['1000 MWh expansion'][t] + renovation_non_dh_heating(t)
@@ -218,27 +215,40 @@ class CityModel():
         heating.static_variables = {grid_expansion_variable, inv_1, inv_15, shallow_inv_1, shallow_inv_15}        
         parts.add(heating)
 
-        # Removing taxes according to excel Innsbruck_v3 sheet electricity cotst italy
+        power_import = pl.Import(
+                        resource=pl.Resources.power,
+                        price=parameters['prices'][pl.Resources.power],
+                        name='Import(Resources.power)',
+                        CO2_factor=parameters['CO2_factor'][pl.Resources.power])
+        parts.add(power_import)
+        
+        city_pipe = fs.FlowNetwork(resource = pl.Resources.power)
+        city_pipe.connect(power_import, city)
+        city_pipe.cost = lambda t: 0
+        parts.add(city_pipe)
+
+        power_heating_pipe = fs.FlowNetwork(resource = pl.Resources.power)
+        power_heating_pipe.connect(power_import, heating)
+        power_heating_pipe.cost = lambda t: 0
+        parts.add(power_heating_pipe)
+
+        # Removing taxes according to excel Innsbruck_v3 sheet electricity cost italy
         powerExport = pl.Export(resource = pl.Resources.power,
-                                price =  0,
+                                price = power_export_price,
+                                CO2_factor = parameters['CO2_factor'][pl.Resources.power],
                                 name='power export')
         parts.add(powerExport)
-
-        pv_power_export = pl.Export(resource = pl.Resources.pvpower,
-                                    price = power_export_price,
-                                    name = 'PV Power export')
-        parts.add(pv_power_export)
         
         CO2_emissions = pl.Export(resource = pl.Resources.CO2,
-                        price = 0,
+                        price = -parameters['prices'][pl.Resources.CO2],
                         name = 'CO2_emissions')
         CO2_emissions.time_unit = parameters['time_unit']
         parts.add(CO2_emissions)
 
 
         """ Production Units """
-        parts.add(pl.LinearCHP(name='Existing CHP A', eta=0.776, alpha=0.98, capacity_lb= 4.27, capacity_ub = 4.27 , fuel=pl.Resources.natural_gas, running_cost = -power_export_price, hour = hour))
-        parts.add(pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, capacity_lb= 4.27, capacity_ub = 4.27, fuel=pl.Resources.natural_gas, running_cost = -power_export_price, hour = hour))
+        parts.add(pl.LinearCHP(name='Existing CHP A', eta=0.776, alpha=0.98, capacity_lb= 4.27, capacity_ub = 4.27 , fuel=pl.Resources.natural_gas, running_cost = 0, hour = hour))
+        parts.add(pl.LinearCHP(name='Existing CHP B', eta=0.778, alpha=0.98, capacity_lb= 4.27, capacity_ub = 4.27, fuel=pl.Resources.natural_gas, running_cost = 0, hour = hour))
     
         parts.add(pl.Boiler(name='Existing Boiler A', eta=0.9, Fmax=8.84, fuel=pl.Resources.natural_gas, hour = hour))
         parts.add(pl.Boiler(name='Existing Boiler B',eta=0.87, Fmax=8.84, fuel=pl.Resources.natural_gas, hour = hour))
@@ -246,7 +256,7 @@ class CityModel():
         parts.add(pl.Boiler(name='Existing Boiler D', eta= 0.77, Fmax= 8.84, fuel=pl.Resources.natural_gas, hour = hour))
 
         # Running waste incinerator at 25 MW output max according to D4.2 p 32, techincal limit is 45
-        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 45, capacity_ub= 45, fuel=pl.Resources.waste, running_cost = -power_export_price, hour = hour))  
+        parts.add(pl.LinearCHP(name='Existing Waste Incinerator', eta=0.81, alpha=0.46, capacity_lb= 45, capacity_ub= 45, fuel=pl.Resources.waste, running_cost = 0, hour = hour,  minimum_prod = None))  
         
         parts.add(pl.Accumulator(name='Existing Accumulator', resource=pl.Resources.heat, max_flow=60, capacity_lb= 220, capacity_ub= 220, loss_factor = 0.005, t_start = parameters['t_start'], t_end = parameters['t_end'], hour = hour))
         
@@ -260,7 +270,7 @@ class CityModel():
                 capacity_ub = investment_option_dict[year][scenario]['NG CHP']['capacity [MW] ub'],
                 specific_investment_cost = self.annuity(parameters['interest_rate'], 25, investment_option_dict[year][scenario]['NG CHP']['specific investment cost']),
                 fuel =  pl.Resources.natural_gas,
-                running_cost = -power_export_price,
+                running_cost = 0,
                 hour = hour
                 )
         )
@@ -274,7 +284,7 @@ class CityModel():
                 capacity_ub = investment_option_dict[year][scenario]['Bio CHP']['capacity [MW] ub'],
                 specific_investment_cost = self.annuity(parameters['interest_rate'], 25, investment_option_dict[year][scenario]['Bio CHP']['specific investment cost']),
                 fuel =  pl.Resources.natural_gas,
-                running_cost = -power_export_price,
+                running_cost = 0,
                 hour = hour
                 )
         )
@@ -288,7 +298,7 @@ class CityModel():
                 capacity_lb = investment_option_dict[year][scenario]['PV']['capacity [MW] lb'],
                 capacity_ub = investment_option_dict[year][scenario]['PV']['capacity [MW] ub'],
                 specific_investment_cost = self.annuity(parameters['interest_rate'], input_data['SolarPV']['lifespan'], investment_option_dict[year][scenario]['PV']['specific investment cost']),
-                running_cost = -power_export_price,
+                running_cost = 0,
                 hour = hour
             )
         )
@@ -312,7 +322,7 @@ class CityModel():
         renovation_const_1 = fs.LessEqual(shallow_inv_15+inv_15 + shallow_inv_1+inv_1, 1)
         minimum_renovation = fs.Eq(1, inv_1+inv_15+shallow_inv_1+shallow_inv_15)
         if 'Trade_off' in scenario:
-            timeindependent_constraint = [renovation_const_1]
+            timeindependent_constraint = [minimum_renovation]
             #renovation_const_1
             #timeindependent_constraint = [inv_1_lb, inv_1_ub, inv_15_lb, inv_15_ub, shallow_inv_1_lb, shallow_inv_1_ub, shallow_inv_15_lb, shallow_inv_15_ub] 
         #else:
@@ -320,7 +330,7 @@ class CityModel():
         
         return parts, timeindependent_constraint
         
-
+# CO2 prices converted from euro per ton to euro per kg
 price_scenarios = {
     '2030' : {
         'Italy medium' : {
@@ -329,7 +339,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2,
             'biomass': 23.33,
-            'CO2': 25,
+            'CO2': 25/1000,
             'interest_rate': None,
         },
         'Italy pessimistic' : {
@@ -338,7 +348,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2,
             'biomass': 32.80,
-            'CO2': 34,
+            'CO2': 34/1000,
             'interest_rate': None,
         },
         'SD' : {
@@ -347,7 +357,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2,
             'biomass': 32.16,
-            'CO2': 80,
+            'CO2': 80/1000,
             'interest_rate': None,
         },
         'NP' : {
@@ -356,7 +366,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2,
             'biomass': 15.31,
-            'CO2': 29,
+            'CO2': 29/1000,
             'interest_rate': None,
         }
     },
@@ -367,7 +377,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2,
             'biomass': 94.45,
-            'CO2': 234,
+            'CO2': 234/1000,
             'interest_rate': None,
         },
         'Italy pessimistic' : {
@@ -376,7 +386,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2,	
             'biomass': 44.67,
-            'CO2': 90,
+            'CO2': 90/1000,
             'interest_rate': None,
         },
         'SD' : {
@@ -385,7 +395,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2,
             'biomass': 63.34,  
-            'CO2': 172,	
+            'CO2': 172/1000,	
             'interest_rate': None,
         },
         'NP' : {
@@ -394,7 +404,7 @@ price_scenarios = {
             'heat': 0,
             'waste': 2, 
             'biomass': 23.58,
-            'CO2': 57,
+            'CO2': 57/1000,
             'interest_rate': None,
         }
     }
@@ -408,12 +418,14 @@ if __name__ == "__main__":
     print('Beginning scenario loop at {}'.format(scenario_start_time))
     for price_scenario in ['Italy medium', 'Italy pessimistic', 'SD', 'NP']:
         for year in ['2030', '2050']:
-            for CO2_cost in ['CO2_cost', 'No_CO2_cost']:
+            for CO2_cost in ['No_CO2_cost', 'CO2_cost']:
                 input_parameters=data[year+'_input_parameters']
                 interest_rate = 0.028 #input_parameters['prices']['interest_rate']
                 input_parameters['prices'] = price_scenarios[year][price_scenario]
                 input_parameters['prices']['interest_rate'] = interest_rate
-                if CO2_cost in 'No_CO2_cost':
+                if CO2_cost in 'CO2_cost':
+                    pass
+                else:
                     input_parameters['prices']['CO2'] = 0
 
                 for scenario in ['BAU', 'Max_RES', 'Max_DH', 'Max_Retrofit', 'Trade_off']: 

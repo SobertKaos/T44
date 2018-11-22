@@ -18,7 +18,6 @@ class Resources(Enum):
     waste = 4
     biomass = 5
     CO2 = 6
-    pvpower = 7
     
 
 
@@ -88,7 +87,7 @@ class LinearCHP(fs.Node):
     """docstring for LinearCHP"""
 
     def __init__(self, fuel=None, alpha=None, eta=None, taxation=None, 
-                specific_investment_cost=0, running_cost=0, capacity_lb=0, capacity_ub = None, hour= 1, **kwargs):        
+                specific_investment_cost=0, running_cost=0, capacity_lb=0, capacity_ub = None, hour= 1, minimum_prod=None, **kwargs):        
         super().__init__(**kwargs)
         
         with fs.namespace(self):
@@ -107,6 +106,8 @@ class LinearCHP(fs.Node):
         self.state_variables = lambda t: {F(t)}
         self.static_variables = {capacity}
         self.constraints += lambda t: fs.LessEqual(F(t), capacity)
+        if minimum_prod:
+            self.constraints += lambda t: fs.LessEqual(F(t), minimum_prod)
 
 
 class SolarPV(fs.Node):
@@ -122,19 +123,15 @@ class SolarPV(fs.Node):
 
         with fs.namespace(self):
             capacity = fs.Variable(lb = capacity_lb, ub = capacity_ub, name='PV capacity')
-            pv_power_capacity = fs.VariableCollection(lb = 0, ub = capacity_ub, name='PV production of export power')
-            power_capacity = fs.VariableCollection(lb = 0, ub = capacity_ub, name = 'PV production of consumption power')
 
         
         self.cost = lambda t: running_cost * self.production[Resources.power](t)            
         self.investment_cost = capacity * specific_investment_cost
                 
-        self.state_variables = lambda t: {pv_power_capacity(t), power_capacity(t)} 
+        self.state_variables = lambda t: {} 
         self.static_variables =  {capacity}
         
-        self.production[Resources.power] =lambda t: prod(t) * power_capacity(t) / hour
-        self.production[Resources.pvpower] = lambda t: prod(t) * pv_power_capacity(t) / hour
-        self.constraints += lambda t: fs.Eq(pv_power_capacity(t) + power_capacity(t), capacity)
+        self.production[Resources.power] =lambda t: prod(t) * capacity / hour
         
         def prod(t):
             c1 = -0.0177162
@@ -183,13 +180,16 @@ class Import(fs.Node):
 class Export(fs.Node):
     """ docstring for Export """
 
-    def __init__(self, resource=None, capacity=None, price=0, **kwargs):
+    def __init__(self, resource=None, capacity=None, price=0, CO2_factor=None ,**kwargs):
         super().__init__(**kwargs)
 
         with fs.namespace(self):
             quantity = VariableCollection(lb=0, ub=capacity, name='export of {}'.format(resource))
 
         self.consumption[resource] = quantity
+        if CO2_factor:
+            pass
+            #self.consumption[Resources.CO2] = lambda t: quantity(t) * CO2_factor
 
         if isinstance(price, numbers.Real):
             self.cost = lambda t: -price * quantity(t)

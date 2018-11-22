@@ -23,7 +23,7 @@ def process_results(model, parameters, Resources, year, scenario, price_scenario
     for resource, price in parameters['prices'].items():
         prices[resource._name_] = price
 
-    total= {'input for scenario':input_data, 'input investment_data':investment_data, 'production':production, 
+    total= {'input for scenario':input_data, 'input investment_data':investment_data, 'production':production,
     'consumption':consumption, 'invest or not': static_variables, 'total cost and emissions':total_results, 'stored_energy':stored_energy,
     'waste consumers': waste_consumers, 'CO2_emissions': CO2_emissions, 'power_production':power_production, 'power_consumers': power_consumers,
     'import resources': import_resources, 'prices': prices}
@@ -114,7 +114,7 @@ def production_results(m, parameters, parts, Resources):
     power = {p.name:
         fs.get_series(p.production[Resources.power], times)
         for p in power_producers}
-
+    
     power_production = pd.DataFrame.from_dict(power) 
     
     return heat, stored_energy, power_production
@@ -193,18 +193,20 @@ def get_total_results(m, parameters, parts, Resources, scenario):
                 cost_tot += part.cost(t)
     
     """The CO2 emissions from the system"""
+    total_emissions=0
+    CO2_emissions = dict()
     for part in parts:
+        times=m.times_between(parameters['t_start'],parameters['t_end'])
         if (not isinstance(part, fs.FlowNetwork)) and (not isinstance(part, fs.Cluster)):
             if (Resources.CO2 in part.consumption):
-                times=m.times_between(parameters['t_start'],parameters['t_end'])
-                CO2_emissions = {part.name:
-                    fs.get_series(part.consumption[Resources.CO2], times)}
+                CO2_emissions[part.name] = fs.get_series(part.consumption[Resources.CO2], times)
+                total_emissions += CO2_emissions[part.name].sum()
                 
-                total_emissions=0
-                for CO2 in CO2_emissions.values():
-                    for row_index, row in CO2.iteritems():
-                        total_emissions += row
-                CO2_emissions=pd.DataFrame.from_dict(CO2_emissions)
+        if isinstance(part, pl.Export) and Resources.power in part.consumption:
+            CO2_emissions[part.name] = -fs.get_series(part.consumption[Resources.power], times) * parameters['CO2_factor'][Resources.power]
+            total_emissions += CO2_emissions[part.name].sum()
+
+    CO2_emissions=pd.DataFrame.from_dict(CO2_emissions)
     
     total_results={'investment cost [EUR/year]':investment_cost_tot, 'running cost [EUR/year]': cost_tot, 
                     'total emissions [kg/year]':total_emissions}
