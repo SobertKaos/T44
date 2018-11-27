@@ -237,7 +237,7 @@ class CityModel():
                                 CO2_factor = parameters['CO2_factor'][pl.Resources.power],
                                 name='power export')
         parts.add(powerExport)
-        
+
         CO2_emissions = pl.Export(resource = pl.Resources.CO2,
                         price = -parameters['prices'][pl.Resources.CO2],
                         name = 'CO2_emissions')
@@ -425,8 +425,9 @@ if __name__ == "__main__":
             for CO2_cost in ['No_CO2_cost', 'CO2_cost']:
                 input_parameters=data[year+'_input_parameters']
                 interest_rate = 0.028 #input_parameters['prices']['interest_rate']
-                input_parameters['prices'] = price_scenarios[year][price_scenario]
+                input_parameters['prices'] = price_scenarios[year][price_scenario].copy()
                 input_parameters['prices']['interest_rate'] = interest_rate
+                
                 if CO2_cost in 'CO2_cost':
                     pass
                 else:
